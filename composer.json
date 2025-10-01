@@ -1,0 +1,28 @@
+{
+  "name": "kazanove/codex-framework",
+  "description": "Минимальный, модульный PHP-фреймворк с нулевыми внешними зависимостями.",
+  "type": "project",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Сергей Тыльнов",
+      "email": "sergey.tylnov@gmail.com"
+    }
+  ],
+  "require": {
+    "php": "^8.4"
+  },
+  "autoload": {
+    "psr-4": {
+      "Codex\\": "CodeX/"
+    }
+  },
+  "autoload-dev": {
+
+  },
+  "config": {
+    "allow-plugins": {
+      "phpstan/extension-installer": true
+    }
+  }
+}
