@@ -7,6 +7,7 @@ return[
         \CodeX\Providers\Response::class,
         \CodeX\Providers\Logger::class,
         \CodeX\Providers\Debug::class,
+        \CodeX\Providers\Router::class,
     ],
     'app' => [
         'debug' => true,
