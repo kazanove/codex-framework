@@ -1,20 +1,19 @@
 <?php
+
 declare(strict_types=1);
 
 namespace CodeX\Router;
 
 class Route
 {
-    private Definition $definition;
+    private string $compiledPattern;
+    private array $paramNames;
 
-    public function __construct(Definition $definition)
+    public function __construct(private Definition $definition)
     {
-        $this->definition = $definition;
-    }
-
-    public function getUri(): string
-    {
-        return $this->definition->uri;
+        // Предварительная компиляция шаблона для производительности
+        $this->compiledPattern = $this->compileRoute($definition->uri);
+        $this->paramNames = $this->getParamNames($definition->uri);
     }
 
     public function getDefinition(): Definition
@@ -22,44 +21,36 @@ class Route
         return $this->definition;
     }
 
-    public function getAction(): string|array|\Closure
-    {
-        return $this->definition->action;
-    }
-
-    public function getMiddleware(): array
-    {
-        return $this->definition->middleware;
-    }
-
     public function matches(string $path, ?array &$params = null): bool
     {
-        $pattern = $this->compileRoute($this->definition->uri);
-        if (preg_match($pattern, $path, $matches)) {
-            array_shift($matches);
-            $paramNames = $this->getParamNames($this->definition->uri);
-            if (count($paramNames) !== count($matches)) {
-                $params = [];
-            } else {
-                $params = array_combine($paramNames, $matches);
-            }
+        if (!preg_match($this->compiledPattern, $path, $matches)) {
+            return false;
+        }
+
+        array_shift($matches); // Удаляем полное совпадение
+
+        // Быстрая проверка количества параметров
+        if (count($this->paramNames) !== count($matches)) {
+            $params = [];
             return true;
         }
-        return false;
+
+        $params = array_combine($this->paramNames, $matches);
+        return true;
     }
 
     private function compileRoute(string $uri): string
     {
-        $pattern = preg_replace_callback('/([^{\}]+)/', static function ($matches) {
-            return preg_quote($matches[1], '/');
-        }, $uri);
+        // Экранируем статические части
+        $pattern = preg_quote($uri, '/');
+        // Заменяем параметры на регулярки
+        $pattern = preg_replace('/\\\{([a-zA-Z0-9_]+)(?::([^}]+))?\\\}/', '(?P<$1>$2)', $pattern);
+        // Заменяем именованные группы на обычные, если нет ограничений
+        $pattern = preg_replace('/\(\?P<([a-zA-Z0-9_]+)>/', '(', $pattern);
+        // Добавляем ограничения по умолчанию
+        $pattern = preg_replace('/\(\?P<([a-zA-Z0-9_]+)>/', '([^\/]+)', $pattern);
 
-        $pattern = preg_replace_callback('/\{([a-zA-Z0-9_]+)(?::([^}]+))?\}/', static function ($matches) {
-            $constraint = $matches[2] ?? '[^\/]+';
-            return '(' . $constraint . ')';
-        }, $pattern);
-
-        return '/^' . $pattern . '$/';
+        return '/^' . $pattern . '$/u'; // u = UTF-8 поддержка
     }
 
     private function getParamNames(string $uri): array
