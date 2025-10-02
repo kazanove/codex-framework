@@ -97,7 +97,6 @@ class Container implements ContainerInterface
      */
     public function make(string $abstract, array $parameters = []): object
     {
-        // Защита от циклических зависимостей
         if (isset($this->resolving[$abstract])) {
             throw new RuntimeException("Циклическая зависимость при разрешении: {$abstract}");
         }
@@ -121,15 +120,15 @@ class Container implements ContainerInterface
                     $object = $this->build($concrete, $parameters);
                 }
             } elseif (class_exists($abstract)) {
-                // Автоматическая привязка
-                $this->bind($abstract);
-                return $this->make($abstract, $parameters);
+                // Автоматическая привязка: создаём напрямую, без рекурсии
+                $this->bind($abstract); // регистрируем привязку
+                $object = $this->build($abstract, $parameters); // сразу строим
             } else {
                 throw new RuntimeException("Не удаётся разрешить класс: {$abstract}");
             }
 
             // Сохраняем как singleton, если нужно
-            if ($this->bindings[$abstract]['share'] === true) {
+            if (isset($this->bindings[$abstract]) && $this->bindings[$abstract]['share'] === true) {
                 $this->instances[$abstract] = $object;
             }
 
@@ -247,5 +246,13 @@ class Container implements ContainerInterface
 
         $instance = is_string($classOrInstance) ? $this->make($classOrInstance) : $classOrInstance;
         return $reflection->invokeArgs($instance, $dependencies);
+    }
+    public function getBindings(): array
+    {
+        return array_keys($this->bindings);
+    }
+    public function getInstances(): array
+    {
+        return array_keys($this->instances);
     }
 }

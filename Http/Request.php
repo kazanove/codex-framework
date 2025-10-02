@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace CodeX\Http;
 
+use JsonException;
+
 class Request implements \ArrayAccess
 {
     private array $server=[];
@@ -102,5 +104,38 @@ class Request implements \ArrayAccess
         } else {
              unset($_GET[$offset]);
         }
+    }
+
+    /**
+     * @throws JsonException
+     */
+    public function getParsedBody(): array|null
+    {
+        if (!in_array($this->getMethod(), ['POST', 'PUT', 'PATCH', 'DELETE'])) {
+            return null;
+        }
+
+        $contentType = $this->header('Content-Type') ?? '';
+
+        // Формы
+        if (empty($contentType)||
+        str_contains($contentType, 'application/x-www-form-urlencoded') ||
+            str_contains($contentType, 'multipart/form-data')
+            ) {
+            return $_POST;
+        }
+
+        // JSON
+        if (str_contains($contentType, 'application/json')) {
+            $body = file_get_contents('php://input');
+            $data = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
+            return is_array($data) ? $data : null;
+        }
+
+        return null;
+    }
+    public function getCookieParams(): array
+    {
+        return $_COOKIE;
     }
 }

@@ -13,7 +13,6 @@ return[
         'log_path' => dirname(__DIR__) . '/storage/logs/app.log',
     ],
     'shutdown'=>[
-        [\CodeX\Debug\Bar::class, 'injectToResponse'],
         [\CodeX\Http\Response::class, 'send'],
     ],
     'middleware' => [

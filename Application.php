@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CodeX;
 
+use CodeX\Http\Response;
 use ErrorException;
 use Psr\Container\ContainerInterface;
 use ReflectionException;
@@ -22,7 +23,7 @@ class Application
     public function __construct(string $dirApp)
     {
         error_reporting(-1);
-        ini_set('display_errors', 'off');
+        ini_set('display_errors', 'on');
         set_error_handler([$this, 'handlerError']);
         set_exception_handler([$this, 'handleException']);
         register_shutdown_function([$this, 'handlerShutdown']);

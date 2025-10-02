@@ -58,10 +58,20 @@ class Debug extends Provider
         // === Сбор данных запроса ===
         try {
             $request = $container->make(Request::class);
-            $requestData = ['method' => $request->getMethod(), 'uri' => $request->getRequestUri(), 'path' => $request->getPathInfo(), 'get' => $request->getQueryParams(), 'post' => $request->getParsedBody(), 'cookies' => $request->getCookieParams(), 'session' => $_SESSION ?? [], 'ip' => $_SERVER['REMOTE_ADDR'] ?? 'N/A', 'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'N/A',];
+            $requestData = [
+                'method' => $request->getMethod(),
+                'uri' => $request->getRequestUri(),
+                'path' => $request->getPathInfo(),
+                'get' => $request->getQueryParams(),
+                'post' => $request->getParsedBody(),
+                'cookies' => $request->getCookieParams(),
+                'session' => $_SESSION ?? [],
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'N/A',
+                'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'N/A',
+            ];
             $debugBar->addData('request_data', $requestData);
         } catch (Throwable $e) {
-            $debugBar->addData('request_data', ['error' => 'Failed to resolve request: ' . $e->getMessage()]);
+            $debugBar->addData('request_data', ['error' => 'Не удалось разрешить запрос: ' . $e->getMessage()]);
         }
 
         // === Данные контейнера ===

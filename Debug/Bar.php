@@ -8,6 +8,8 @@ use CodeX\Http\Response;
 
 class Bar
 {
+
+
     private array $data = [];
 
     public function __construct(private readonly bool $enabled = false)
@@ -36,13 +38,14 @@ class Bar
                 break;
             }
         }
-        trigger_error('');
+
         if (!$isHtml) {
             return;
         }
-        trigger_error('');
+
         $content = $response->getContent();
         $debugHtml = $this->render();
+
         if (str_contains($content, '</body>')) {
             $content = str_replace('</body>', $debugHtml . '</body>', $content);
         } else {
@@ -54,94 +57,148 @@ class Bar
 
     private function render(): string
     {
-        $panels = [
-            'request' => $this->renderRequestPanel(),
-            'performance' => $this->renderPerformancePanel(),
-            'memory' => $this->renderMemoryPanel(),
-            'logs' => $this->renderLogsPanel(),
-            'container' => $this->renderContainerPanel(),
-        ];
+        $panels = ['request' => $this->renderRequestPanel(), 'performance' => $this->renderPerformancePanel(), 'memory' => $this->renderMemoryPanel(), 'logs' => $this->renderLogsPanel(), 'container' => $this->renderContainerPanel(),];
 
-        // Удаляем пустые панели
         $panels = array_filter($panels, static fn($v) => $v !== '');
 
         if (empty($panels)) {
             return '';
         }
 
-        $html = '<style>';
-        $html .= '#codex-debug-bar { position: fixed; bottom: -300px; left: 0; right: 0; background: #2c3e50; color: #ecf0f1; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; font-size: 11px; z-index: 99999; box-shadow: 0 -2px 10px rgba(0,0,0,0.3); transition: bottom 0.3s ease; }';
-        $html .= '#codex-debug-bar.visible { bottom: 0; }';
-        $html .= '.debug-bar-header { padding: 6px 12px; background: #e74c3c; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }';
-        $html .= '.debug-bar-header span { color: white; }';
-        $html .= '.debug-bar-tabs { display: flex; background: #34495e; border-bottom: 1px solid #2c3e50; }';
-        $html .= '.debug-bar-tab { padding: 8px 16px; cursor: pointer; border-right: 1px solid #2c3e50; background: #34495e; }';
-        $html .= '.debug-bar-tab:hover { background: #3d566e; }';
-        $html .= '.debug-bar-tab.active { background: #e74c3c; }';
-        $html .= '.debug-bar-panels { padding: 10px; background: #34495e; max-height: 300px; overflow-y: auto; }';
-        $html .= '.debug-bar-panel { display: none; }';
-        $html .= '.debug-bar-panel.active { display: block; }';
-        $html .= '.debug-bar-panel pre { background: #2c3e50; padding: 8px; border-radius: 4px; overflow-x: auto; margin: 0; white-space: pre-wrap; font-size: 11px; line-height: 1.4; }';
-        $html .= '.debug-bar-panel table { width: 100%; border-collapse: collapse; margin-top: 8px; }';
-        $html .= '.debug-bar-panel th, .debug-bar-panel td { padding: 6px; text-align: left; border-bottom: 1px solid #555; }';
-        $html .= '.debug-bar-panel th { background: #2c3e50; }';
-        $html .= '</style>';
+        // Единый стиль — компактный и читаемый
+        $style = '
+            #codex-debug-bar {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: #2c3e50;
+                color: #ecf0f1;
+                font: 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                z-index: 99999;
+                box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+                max-height: 300px;
+                display: none;
+            }
+            #codex-debug-bar.visible { display: block; }
+            .debug-bar-header {
+                padding: 8px 16px;
+                background: #e74c3c;
+                font-weight: bold;
+                cursor: pointer;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .debug-bar-tabs {
+                display: flex;
+                background: #34495e;
+                border-bottom: 1px solid #2c3e50;
+            }
+            .debug-bar-tab {
+                padding: 10px 16px;
+                cursor: pointer;
+                border-right: 1px solid #2c3e50;
+                background: #34495e;
+            }
+            .debug-bar-tab:hover { background: #3d566e; }
+            .debug-bar-tab.active { background: #e74c3c; }
+            .debug-bar-panels {
+                padding: 12px;
+                background: #34495e;
+                max-height: 250px;
+                overflow-y: auto;
+            }
+            .debug-bar-panel { display: none; }
+            .debug-bar-panel.active { display: block; }
+            .debug-bar-panel pre {
+                background: #2c3e50;
+                padding: 10px;
+                border-radius: 4px;
+                overflow-x: auto;
+                margin: 8px 0;
+                white-space: pre-wrap;
+                font-size: 12px;
+                line-height: 1.4;
+            }
+            .debug-bar-panel table {
+                width: 100%;
+                border-collapse: collapse;
+                margin: 8px 0;
+            }
+            .debug-bar-panel th,
+            .debug-bar-panel td {
+                padding: 8px;
+                text-align: left;
+                border-bottom: 1px solid #555;
+            }
+            .debug-bar-panel th { background: #2c3e50; }
+        ';
 
-        $html .= '<div id="codex-debug-bar">';
+        // Маппинг имён панелей
+        $panelLabels = ['request' => 'Запрос', 'performance' => 'Производительность', 'memory' => 'Память', 'logs' => 'Логи', 'container' => 'Контейнер',];
+
+        $html = '<div id="codex-debug-bar">';
         $html .= '<div class="debug-bar-header" onclick="toggleCodexDebugBar()">';
         $html .= '<span>CodeX Debug Bar</span>';
         $html .= '<small>Ctrl+Shift+D</small>';
         $html .= '</div>';
+
+        // Вкладки
         $html .= '<div class="debug-bar-tabs">';
-
-        foreach (array_keys($panels) as $panelName) {
-            $label = match ($panelName) {
-                'request' => 'Запрос',
-                'performance' => 'Производительность',
-                'memory' => 'Память',
-                'logs' => 'Логи',
-                'container' => 'Контейнер',
-                default => ucfirst($panelName),
-            };
-            $html .= '<div class="debug-bar-tab" data-panel="' . htmlspecialchars($panelName, ENT_QUOTES, 'UTF-8') . '">' . $label . '</div>';
+        foreach (array_keys($panels) as $name) {
+            $label = $panelLabels[$name] ?? ucfirst($name);
+            $html .= '<div class="debug-bar-tab" data-panel="' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '">' . $label . '</div>';
         }
         $html .= '</div>';
+
+        // Панели контента
         $html .= '<div class="debug-bar-panels">';
-        foreach ($panels as $panelName => $panelContent) {
-            $html .= '<div class="debug-bar-panel" id="debug-panel-' . htmlspecialchars($panelName, ENT_QUOTES, 'UTF-8') . '">' . $panelContent . '</div>';
+        foreach ($panels as $name => $content) {
+            $html .= '<div class="debug-bar-panel" id="debug-panel-' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '">' . $content . '</div>';
         }
         $html .= '</div>';
         $html .= '</div>';
 
-        $html .= '<script>';
-        $html .= 'function toggleCodexDebugBar() {';
-        $html .= '  let bar = document.getElementById("codex-debug-bar");';
-        $html .= '  bar.classList.toggle("visible");';
-        $html .= '}';
-        $html .= 'document.addEventListener("keydown", function(e) {';
-        $html .= '  if (e.ctrlKey && e.shiftKey && e.key === "D") {';
-        $html .= '    toggleCodexDebugBar();';
-        $html .= '    e.preventDefault();';
-        $html .= '  }';
-        $html .= '});';
-        $html .= 'document.addEventListener("DOMContentLoaded", function() {';
-        $html .= '  let tabs = document.querySelectorAll(".debug-bar-tab");';
-        $html .= '  let panels = document.querySelectorAll(".debug-bar-panel");';
-        $html .= '  if (tabs[0]) { tabs[0].classList.add("active"); panels[0].classList.add("active"); }';
-        $html .= '  tabs.forEach(tab => {';
-        $html .= '    tab.addEventListener("click", function() {';
-        $html .= '      tabs.forEach(t => t.classList.remove("active"));';
-        $html .= '      panels.forEach(p => p.classList.remove("active"));';
-        $html .= '      this.classList.add("active");';
-        $html .= '      let panelName = this.getAttribute("data-panel");';
-        $html .= '      let targetPanel = document.getElementById("debug-panel-" + panelName);';
-        $html .= '      if (targetPanel) targetPanel.classList.add("active");';
-        $html .= '    });';
-        $html .= '  });';
-        $html .= '});';
-        $html .= '</script>';
+        // JS — один блок, без дублирования
+        $js = '
+            <script>
+            (function() {
+                function toggleCodexDebugBar() {
+                    var bar = document.getElementById("codex-debug-bar");
+                    bar.classList.toggle("visible");
+                }
 
-        return $html;
+                document.addEventListener("keydown", function(e) {
+                    if (e.ctrlKey && e.shiftKey && e.key === "D") {
+                        toggleCodexDebugBar();
+                        e.preventDefault();
+                    }
+                });
+
+                document.addEventListener("DOMContentLoaded", function() {
+                    var tabs = document.querySelectorAll(".debug-bar-tab");
+                    var panels = document.querySelectorAll(".debug-bar-panel");
+                    if (tabs[0]) {
+                        tabs[0].classList.add("active");
+                        panels[0].classList.add("active");
+                    }
+                    tabs.forEach(function(tab) {
+                        tab.addEventListener("click", function() {
+                            tabs.forEach(t => t.classList.remove("active"));
+                            panels.forEach(p => p.classList.remove("active"));
+                            this.classList.add("active");
+                            var panelName = this.getAttribute("data-panel");
+                            var targetPanel = document.getElementById("debug-panel-" + panelName);
+                            if (targetPanel) targetPanel.classList.add("active");
+                        });
+                    });
+                });
+            })();
+            </script>
+        ';
+
+        return "<style>{$style}</style>{$html}{$js}";
     }
 
     private function renderRequestPanel(): string
