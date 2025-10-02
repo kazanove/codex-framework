@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace CodeX;
@@ -8,50 +9,94 @@ use JsonException;
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use RuntimeException;
-use Stringable;
 
 class Logger implements LoggerInterface
 {
     private string $name;
     private string $logPath;
-    private array $levelMap = [
-        LogLevel::EMERGENCY => 700,
-        LogLevel::ALERT => 600,
-        LogLevel::CRITICAL => 550,
-        LogLevel::ERROR => 500,
-        LogLevel::WARNING => 400,
-        LogLevel::NOTICE => 300,
-        LogLevel::INFO => 200,
-        LogLevel::DEBUG => 100,
-    ];
+    private array $levelMap = [LogLevel::EMERGENCY => 700, LogLevel::ALERT => 600, LogLevel::CRITICAL => 550, LogLevel::ERROR => 500, LogLevel::WARNING => 400, LogLevel::NOTICE => 300, LogLevel::INFO => 200, LogLevel::DEBUG => 100,];
 
     private int $minLevel;
+    private ?array $buffer = null;
 
-    public function __construct(string $name, string $logPath, string $minLevel = LogLevel::DEBUG)
+    public function __construct(string $name, string $logPath, string $minLevel = LogLevel::DEBUG, bool $buffered = false)
     {
         $this->name = $name;
         $this->logPath = rtrim($logPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
         $this->minLevel = $this->levelMap[$minLevel] ?? 100;
 
-        if (!is_dir($this->logPath) && !mkdir($concurrentDirectory = $this->logPath, 0755, true) && !is_dir($concurrentDirectory)) {
-            throw new RuntimeException(sprintf('Каталог «%s» не был создан', $concurrentDirectory));
+        if ($buffered) {
+            $this->buffer = []; // включаем буферизацию
+        } else if (!is_dir($this->logPath) && !mkdir($this->logPath, 0755, true) && !is_dir($this->logPath)) {
+            throw new RuntimeException(sprintf('Каталог «%s» не был создан', $this->logPath));
         }
     }
 
     /**
-     * @throws JsonException
+     * Получить накопленные записи (для Debug Bar)
      */
-    public function emergency(string|Stringable $message, array $context = []): void
+    public function getRecords(): array
     {
-        $this->log(LogLevel::EMERGENCY, $message, $context);
+        return $this->buffer ?? [];
     }
 
-    // Реализация PSR-3 методов
+    /**
+     * Очистить буфер
+     */
+    public function clear(): void
+    {
+        if ($this->buffer !== null) {
+            $this->buffer = [];
+        }
+    }
+
+    /**
+     * Переключиться в режим записи в файл (остановить буферизацию)
+     * @throws JsonException
+     */
+    public function flushTo(?string $logPath = null): void
+    {
+        if ($this->buffer === null) {
+            return;
+        }
+
+        $logPath = $logPath ?? $this->logPath;
+        if (!is_dir($logPath) && !mkdir($logPath, 0755, true) && !is_dir($logPath)) {
+            throw new RuntimeException(sprintf('Каталог «%s» не был создан', $logPath));
+        }
+
+        foreach ($this->buffer as $record) {
+            $this->writeLogToFile($record['level'], $record['message'], $record['context'], $logPath);
+        }
+
+        $this->buffer = null;
+        $this->logPath = $logPath;
+    }
+
+    /**
+     * Запись одной записи в файл
+     */
+    private function writeLogToFile(string $level, string $message, array $context, string $logPath): void
+    {
+        $timestamp = new DateTimeImmutable()->format('Y-m-d H:i:s.u');
+        $logLine = sprintf("[%s] %s.%s: %s%s\n", $timestamp, $this->name, strtoupper($level), $message, !empty($context) ? ' ' . json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : '');
+
+        $logFile = $logPath . $this->name . '-' . new DateTimeImmutable()->format('Y-m-d') . '.log';
+        @file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX);
+    }
 
     /**
      * @throws JsonException
      */
-    public function log($level, string|Stringable $message, array $context = []): void
+    public function emergency($message, array $context = []): void
+    {
+        $this->log(LogLevel::EMERGENCY, $message, $context);
+    }
+
+    /**
+     * @throws JsonException
+     */
+    public function log($level, $message, array $context = []): void
     {
         $levelName = strtolower($level);
         $levelValue = $this->levelMap[$levelName] ?? 0;
@@ -60,25 +105,19 @@ class Logger implements LoggerInterface
             return;
         }
 
-        $this->writeLog($levelName, (string)$message, $context);
+        $formattedMessage = $this->interpolate((string)$message, $context);
+
+        if ($this->buffer !== null) {
+            // Режим буферизации
+            $this->buffer[] = ['level' => $levelName, 'message' => $formattedMessage, 'context' => $context, 'time' => new DateTimeImmutable()->format('H:i:s.u'),];
+        } else {
+            // Режим записи в файл
+            $this->writeLogToFile($levelName, $formattedMessage, $context, $this->logPath);
+        }
     }
 
-    /**
-     * @throws JsonException
-     */
-    private function writeLog(string $level, string $message, array $context): void
-    {
-        $timestamp = new DateTimeImmutable()->format('Y-m-d H:i:s.u');
-        $formattedMessage = $this->interpolate($message, $context);
-        $logLine = sprintf("[%s] %s.%s: %s %s\n", $timestamp, $this->name, strtoupper($level), $formattedMessage, !empty($context) ? json_encode($context, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE) : '');
+    // Реализация остальных методов PSR-3 (можно оставить как есть)
 
-        $logFile = $this->getLogFile();
-        file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX);
-    }
-
-    /**
-     * Заменяет {placeholders} в сообщении на значения из $context
-     */
     private function interpolate(string $message, array $context): string
     {
         $replace = [];
@@ -87,20 +126,13 @@ class Logger implements LoggerInterface
                 $replace['{' . $key . '}'] = $val;
             }
         }
-
         return strtr($message, $replace);
-    }
-
-    private function getLogFile(): string
-    {
-        $date = new DateTimeImmutable()->format('Y-m-d');
-        return $this->logPath . $this->name . '-' . $date . '.log';
     }
 
     /**
      * @throws JsonException
      */
-    public function alert(string|Stringable $message, array $context = []): void
+    public function alert($message, array $context = []): void
     {
         $this->log(LogLevel::ALERT, $message, $context);
     }
@@ -108,7 +140,7 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function critical(string|Stringable $message, array $context = []): void
+    public function critical($message, array $context = []): void
     {
         $this->log(LogLevel::CRITICAL, $message, $context);
     }
@@ -116,7 +148,7 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function error(string|Stringable $message, array $context = []): void
+    public function error($message, array $context = []): void
     {
         $this->log(LogLevel::ERROR, $message, $context);
     }
@@ -124,7 +156,7 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function warning(string|Stringable $message, array $context = []): void
+    public function warning($message, array $context = []): void
     {
         $this->log(LogLevel::WARNING, $message, $context);
     }
@@ -132,7 +164,7 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function notice(string|Stringable $message, array $context = []): void
+    public function notice($message, array $context = []): void
     {
         $this->log(LogLevel::NOTICE, $message, $context);
     }
@@ -140,7 +172,7 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function info(string|Stringable $message, array $context = []): void
+    public function info($message, array $context = []): void
     {
         $this->log(LogLevel::INFO, $message, $context);
     }
@@ -148,14 +180,11 @@ class Logger implements LoggerInterface
     /**
      * @throws JsonException
      */
-    public function debug(string|Stringable $message, array $context = []): void
+    public function debug($message, array $context = []): void
     {
         $this->log(LogLevel::DEBUG, $message, $context);
     }
 
-    /**
-     * Возвращает имя канала
-     */
     public function getName(): string
     {
         return $this->name;

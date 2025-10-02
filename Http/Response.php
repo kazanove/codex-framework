@@ -7,7 +7,7 @@ class Response
 {
     private int $statusCode = 200;
     public string $content = '';
-    private array $header = [];
+    private array $headers = [];
 
     public function __construct()
     {
@@ -22,11 +22,10 @@ class Response
     {
         if (!headers_sent()) {
             http_response_code($this->statusCode);
-            foreach ($this->header as $name => $value) {
+            foreach ($this->headers as $name => $value) {
                 header($name . ': ' . $value, true);
             }
         }
-
         echo $this->content;
     }
 
@@ -43,7 +42,7 @@ class Response
 
     public function header(string $param, string $value): void
     {
-        $this->header[$param] = $value;
+        $this->headers[$param] = $value;
     }
 
     public function setStatusCode(int $code): self
@@ -56,5 +55,10 @@ class Response
         $this->setStatusCode($statusCode);
         $this->header('Location', $url);
         return $this;
+    }
+
+    public function getHeaders():array
+    {
+        return $this->headers;
     }
 }
