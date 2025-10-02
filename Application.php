@@ -23,7 +23,7 @@ class Application
     public function __construct(string $dirApp)
     {
         error_reporting(-1);
-        ini_set('display_errors', 'on');
+        ini_set('display_errors', 'off');
         set_error_handler([$this, 'handlerError']);
         set_exception_handler([$this, 'handleException']);
         register_shutdown_function([$this, 'handlerShutdown']);

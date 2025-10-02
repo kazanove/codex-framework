@@ -20,4 +20,13 @@ return[
     'middleware' => [
         \CodeX\Middleware\Cors::class,
     ],
+    'error_pages' => [
+        '404' => static function (\CodeX\Http\Request $request) {
+            return '<h1>Страница не найдена</h1><p>URL: ' . htmlspecialchars($request->getPathInfo()) . '</p>';
+        },
+        // Можно также указать:
+        // '404' => [App\Controllers\ErrorController::class, 'notFound'],
+        // '404' => 'App\Controllers\ErrorController@notFound',
+        // '404' => __DIR__ . '/views/errors/404.html',
+    ],
 ];

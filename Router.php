@@ -217,6 +217,42 @@ class Router
 
     private function handleNotFound(Request $request): Response
     {
+        // Проверяем, определён ли кастомный обработчик 404
+        if (isset($this->application->config['error_pages']['404'])) {
+            $notFoundHandler = $this->application->config['error_pages']['404'];
+
+            // Поддержка Closure
+            if ($notFoundHandler instanceof \Closure) {
+                $result = $notFoundHandler($request);
+                return $this->makeResponse($result);
+            }
+
+            // Поддержка [Controller::class, 'method']
+            if (is_array($notFoundHandler) && count($notFoundHandler) === 2) {
+                [$controller, $method] = $notFoundHandler;
+                $controllerInstance = $this->application->container->make($controller);
+                $result = $this->callControllerMethod($controllerInstance, $method, [], $request);
+                return $this->makeResponse($result);
+            }
+
+            // Поддержка строки (путь к файлу или Controller@method)
+            if (is_string($notFoundHandler)) {
+                // Проверяем, является ли это файлом
+                if (file_exists($notFoundHandler)) {
+                    $response = $this->application->container->make(Response::class);
+                    $response->setContent(file_get_contents($notFoundHandler));
+                    return $response;
+                }
+
+                // Иначе считаем, что это Controller@method
+                [$controller, $method] = $this->parseAction($notFoundHandler);
+                $controllerInstance = $this->application->container->make($controller);
+                $result = $this->callControllerMethod($controllerInstance, $method, [], $request);
+                return $this->makeResponse($result);
+            }
+        }
+
+        // Стандартная страница 404 по умолчанию
         $response = $this->application->container->make(Response::class);
         $response->setStatusCode(404);
         $response->setContent('<h1>404 Not Found</h1>');

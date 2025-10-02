@@ -325,6 +325,8 @@ class Debug
     public function registerHandlers(): void
     {
         if ($this->enabled) {
+            restore_error_handler();
+            restore_exception_handler();
             set_error_handler([$this, 'handlerError']);
             set_exception_handler([$this, 'handleException']);
         }
