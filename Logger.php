@@ -22,12 +22,18 @@ class Logger implements LoggerInterface
     public function __construct(string $name, string $logPath, string $minLevel = LogLevel::DEBUG, bool $buffered = false)
     {
         $this->name = $name;
-        $this->logPath = rtrim($logPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+
+        // Если $logPath — это файл, извлекаем директорию
+        if (is_file($logPath) || (!is_dir($logPath) && pathinfo($logPath, PATHINFO_EXTENSION) !== '')) {
+            $this->logPath = dirname($logPath);
+        } else {
+            $this->logPath = rtrim($logPath, DIRECTORY_SEPARATOR);
+        }
+
         $this->minLevel = $this->levelMap[$minLevel] ?? 100;
 
-        if ($buffered) {
-            $this->buffer = []; // включаем буферизацию
-        } else if (!is_dir($this->logPath) && !mkdir($this->logPath, 0755, true) && !is_dir($this->logPath)) {
+        // Создаём директорию только если не буферизуем
+        if (!$buffered && !is_dir($this->logPath) && !mkdir($this->logPath, 0755, true) && !is_dir($this->logPath)) {
             throw new RuntimeException(sprintf('Каталог «%s» не был создан', $this->logPath));
         }
     }
@@ -188,5 +194,10 @@ class Logger implements LoggerInterface
     public function getName(): string
     {
         return $this->name;
+    }
+    private function getLogFile(): string
+    {
+        $date = new DateTimeImmutable()->format('Y-m-d');
+        return $this->logPath . DIRECTORY_SEPARATOR . $this->name . '-' . $date . '.log';
     }
 }

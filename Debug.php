@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace CodeX;
 
+use ErrorException;
 use JsonException;
 use Psr\Log\LoggerInterface;
-use Psr\Log\LogLevel;
 use RuntimeException;
+use Throwable;
 
 class Debug
 {
-    // ANSI Colors for CLI
     public const string CLI_COLOR_RESET = "\033[0m";
     public const string CLI_COLOR_RED = "\033[0;31m";
     public const string CLI_COLOR_GREEN = "\033[0;32m";
@@ -22,11 +22,11 @@ class Debug
     public const string CLI_COLOR_WHITE = "\033[0;37m";
     public const string CLI_COLOR_GRAY = "\033[1;30m";
 
-    public function __construct(
-        private bool $enabled = false,
-        private ?string $logPath = null,
-        private ?LoggerInterface $logger = null
-    ) {
+    public function __construct(private readonly bool $enabled = false, private ?string $logPath = null, private ?LoggerInterface $logger = null)
+    {
+        if ($this->logPath !== null && is_dir($this->logPath)) {
+            $this->logPath = rtrim($this->logPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'debug.log';
+        }
     }
 
     /**
@@ -67,11 +67,7 @@ class Debug
      */
     public function log(mixed $var, string $label = ''): void
     {
-        $message = sprintf(
-            "Debug dump: %s\n%s",
-            $label ?: 'No label',
-            $this->formatForLog($var)
-        );
+        $message = sprintf("Debug dump: %s\n%s", $label ?: 'No label', $this->formatForLog($var));
 
         // Если передан PSR-логгер — используем его
         if ($this->logger instanceof LoggerInterface) {
@@ -143,5 +139,194 @@ class Debug
         $dump = preg_replace('/(NULL)/', self::CLI_COLOR_GRAY . '$1' . self::CLI_COLOR_RESET, $dump);
         $dump = preg_replace('/(array\([^)]+\))/', self::CLI_COLOR_YELLOW . '$1' . self::CLI_COLOR_RESET, $dump);
         return preg_replace('/(object\([^)]+\))/', self::CLI_COLOR_PURPLE . '$1' . self::CLI_COLOR_RESET, $dump);
+    }
+
+    public function isEnabled(): bool
+    {
+        return $this->enabled;
+    }
+
+    /**
+     * Обработка исключения в стиле Whoops
+     */
+    public function handleException(Throwable $e): void
+    {
+        if (PHP_SAPI === 'cli') {
+            $this->renderCliException($e);
+        } else {
+            $this->renderHtmlException($e);
+        }
+    }
+
+    /**
+     * CLI-вывод (цветной)
+     */
+    private function renderCliException(Throwable $e): void
+    {
+        echo self::CLI_COLOR_RED . "FATAL ERROR\n" . self::CLI_COLOR_RESET;
+        echo self::CLI_COLOR_WHITE . "Message: " . self::CLI_COLOR_RESET . $e->getMessage() . "\n";
+        echo self::CLI_COLOR_WHITE . "File: " . self::CLI_COLOR_RESET . $e->getFile() . "\n";
+        echo self::CLI_COLOR_WHITE . "Line: " . self::CLI_COLOR_RESET . $e->getLine() . "\n\n";
+
+        $this->renderCliTrace($e);
+    }
+
+    private function renderCliTrace(Throwable $e): void
+    {
+        $trace = $e->getTrace();
+        foreach ($trace as $i => $frame) {
+            $file = $frame['file'] ?? '[internal]';
+            $line = $frame['line'] ?? 0;
+            $class = $frame['class'] ?? '';
+            $type = $frame['type'] ?? '';
+            $function = $frame['function'] ?? '';
+
+            echo sprintf("#%d %s%s%s() called at [%s:%d]\n", $i, $class, $type, $function, $file, $line);
+        }
+    }
+
+    /**
+     * HTML-вывод (Whoops-стиль)
+     */
+    private function renderHtmlException(Throwable $e): void
+    {
+        $title = htmlspecialchars(get_class($e), ENT_QUOTES, 'UTF-8');
+        $message = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+        $file = htmlspecialchars($e->getFile(), ENT_QUOTES, 'UTF-8');
+        $line = $e->getLine();
+
+        // Контекст кода (5 строк до и после)
+        $codeContext = $this->getCodeContext($e->getFile(), $e->getLine());
+
+        $html = '<!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="utf-8">
+            <title>' . $title . '</title>
+            <style>
+                body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", monospace; background: #1e1e1e; color: #d4d4d4; margin: 0; padding: 20px; }
+                .error-header { background: #611f1f; padding: 20px; border-radius: 6px; margin-bottom: 20px; }
+                .error-title { font-size: 24px; margin: 0 0 10px 0; color: #ff6b6b; }
+                .error-message { font-size: 16px; margin: 0; color: #f8f8f2; }
+                .error-location { margin-top: 15px; font-size: 14px; color: #a9a9a9; }
+                .code-block { background: #2d2d2d; border-radius: 6px; overflow: hidden; margin-bottom: 20px; }
+                .code-line { display: flex; }
+                .line-number { width: 50px; text-align: right; padding: 0 10px; color: #6a6a6a; user-select: none; }
+                .line-code { padding: 0 15px; white-space: pre; }
+                .line-highlight { background: #442a2a; }
+                .tabs { display: flex; border-bottom: 2px solid #3a3a3a; margin-bottom: 20px; }
+                .tab { padding: 10px 20px; cursor: pointer; background: #2d2d2d; border: 1px solid #3a3a3a; border-bottom: none; border-radius: 6px 6px 0 0; }
+                .tab.active { background: #1e1e1e; border-bottom: 2px solid #ff6b6b; }
+                .tab-content { display: none; }
+                .tab-content.active { display: block; }
+                .data-table { width: 100%; border-collapse: collapse; }
+                .data-table th, .data-table td { padding: 10px; text-align: left; border-bottom: 1px solid #3a3a3a; }
+                .data-table th { background: #2d2d2d; }
+                pre { margin: 0; }
+            </style>
+        </head>
+        <body>
+            <div class="error-header">
+                <h1 class="error-title">' . $title . '</h1>
+                <p class="error-message">' . $message . '</p>
+                <div class="error-location">in <strong>' . $file . '</strong> on line <strong>' . $line . '</strong></div>
+            </div>
+
+            <div class="code-block">
+                ' . $codeContext . '
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" data-tab="stack">Stack Trace</div>
+                <div class="tab" data-tab="request">Request</div>
+                <div class="tab" data-tab="server">Server</div>
+            </div>
+
+            <div class="tab-content active" id="tab-stack">
+                <pre>' . htmlspecialchars($e->getTraceAsString(), ENT_QUOTES, 'UTF-8') . '</pre>
+            </div>
+
+            <div class="tab-content" id="tab-request">
+                <table class="data-table">
+                    <tr><th>Method</th><td>' . ($_SERVER['REQUEST_METHOD'] ?? 'N/A') . '</td></tr>
+                    <tr><th>URI</th><td>' . ($_SERVER['REQUEST_URI'] ?? 'N/A') . '</td></tr>
+                    <tr><th>GET</th><td><pre>' . htmlspecialchars(print_r($_GET, true), ENT_QUOTES, 'UTF-8') . '</pre></td></tr>
+                    <tr><th>POST</th><td><pre>' . htmlspecialchars(print_r($_POST, true), ENT_QUOTES, 'UTF-8') . '</pre></td></tr>
+                    <tr><th>COOKIES</th><td><pre>' . htmlspecialchars(print_r($_COOKIE, true), ENT_QUOTES, 'UTF-8') . '</pre></td></tr>
+                </table>
+            </div>
+
+            <div class="tab-content" id="tab-server">
+                <table class="data-table">
+                    <tr><th>PHP Version</th><td>' . PHP_VERSION . '</td></tr>
+                    <tr><th>Server</th><td>' . ($_SERVER['SERVER_SOFTWARE'] ?? 'N/A') . '</td></tr>
+                    <tr><th>Document Root</th><td>' . ($_SERVER['DOCUMENT_ROOT'] ?? 'N/A') . '</td></tr>
+                    <tr><th>Remote Addr</th><td>' . ($_SERVER['REMOTE_ADDR'] ?? 'N/A') . '</td></tr>
+                </table>
+            </div>
+
+            <script>
+                document.querySelectorAll(".tab").forEach(tab => {
+                    tab.addEventListener("click", () => {
+                        document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+                        document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+                        tab.classList.add("active");
+                        const target = tab.getAttribute("data-tab");
+                        document.getElementById("tab-" + target).classList.add("active");
+                    });
+                });
+            </script>
+        </body>
+        </html>';
+
+        echo $html;
+    }
+
+    /**
+     * Получает контекст кода с подсветкой ошибки
+     */
+    private function getCodeContext(string $file, int $line): string
+    {
+        if (!is_file($file)) {
+            return '<div class="code-line"><div class="line-code">File not found</div></div>';
+        }
+
+        $source = file($file);
+        $start = max(0, $line - 6);
+        $end = min(count($source), $line + 4);
+
+        $output = '';
+        for ($i = $start; $i < $end; $i++) {
+            $currentLine = $i + 1;
+            $isHighlight = ($currentLine === $line);
+            $lineClass = $isHighlight ? 'line-highlight' : '';
+            $numberClass = $isHighlight ? 'line-number line-highlight' : 'line-number';
+
+            $code = htmlspecialchars($source[$i], ENT_QUOTES, 'UTF-8');
+            $output .= '
+                <div class="code-line ' . $lineClass . '">
+                    <div class="' . $numberClass . '">' . $currentLine . '</div>
+                    <div class="line-code">' . rtrim($code) . '</div>
+                </div>';
+        }
+
+        return $output;
+    }
+
+    /**
+     * @throws ErrorException
+     */
+    public function handlerError(int $severity, string $message, string $file, int $line): void
+    {
+        if (error_reporting() & $severity) {
+            throw new ErrorException($message, 0, $severity, $file, $line);
+        }
+    }
+    public function registerHandlers(): void
+    {
+        if ($this->enabled) {
+            set_error_handler([$this, 'handlerError']);
+            set_exception_handler([$this, 'handleException']);
+        }
     }
 }

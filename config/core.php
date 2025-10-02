@@ -11,6 +11,7 @@ return[
     'app' => [
         'debug' => true,
         'log_path' => dirname(__DIR__) . '/storage/logs/app.log',
+        'debug_log_path' => __DIR__ . '/storage/logs/debug',
     ],
     'shutdown'=>[
         [\CodeX\Http\Response::class, 'send'],

@@ -43,13 +43,14 @@ class Debug extends Provider
         if (!$debugEnabled) {
             return;
         }
-
+        $debug = $this->application->container->get(\CodeX\Debug::class);
+        $debug->registerHandlers();
         // Получаем экземпляры
         $debugBar = $this->application->container->get(Bar::class);
         $container = $this->application->container;
 
         // Создаём буферизованный логгер для отладочной панели
-        $logPath = $this->application->config['app']['log_path'] ?? dirname(__DIR__, 2) . '/storage/logs/app.log';
+        $logPath = $this->application->config['app']['debug_log_path'] ?? dirname(__DIR__, 2) . '/storage/logs/debug';
         $debugLogger = new \CodeX\Logger('debug_bar', $logPath, LogLevel::DEBUG, buffered: true);
 
         // Подменяем основной логгер на буферизованный (только для текущего запроса)
@@ -57,6 +58,7 @@ class Debug extends Provider
 
         // === Сбор данных запроса ===
         try {
+            /** @var Request $request */
             $request = $container->make(Request::class);
             $requestData = [
                 'method' => $request->getMethod(),
@@ -71,7 +73,7 @@ class Debug extends Provider
             ];
             $debugBar->addData('request_data', $requestData);
         } catch (Throwable $e) {
-            $debugBar->addData('request_data', ['error' => 'Не удалось разрешить запрос: ' . $e->getMessage()]);
+            $debugBar->addData('request_data', ['error' => 'Failed to resolve request: ' . $e->getMessage()]);
         }
 
         // === Данные контейнера ===
