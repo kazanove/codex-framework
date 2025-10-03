@@ -19,7 +19,7 @@ class Router extends Provider
     public function boot(): void
     {
         $router = $this->application->container->get(\CodeX\Router::class);
-
+trigger_error('');
         // Загружаем маршруты
         $this->loadRoutes($router);
 
