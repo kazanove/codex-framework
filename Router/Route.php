@@ -41,16 +41,16 @@ class Route
 
     private function compileRoute(string $uri): string
     {
-        // Экранируем статические части
+        // Экранируем всё, кроме параметров
         $pattern = preg_quote($uri, '/');
-        // Заменяем параметры на регулярки
-        $pattern = preg_replace('/\\\{([a-zA-Z0-9_]+)(?::([^}]+))?\\\}/', '(?P<$1>$2)', $pattern);
-        // Заменяем именованные группы на обычные, если нет ограничений
-        $pattern = preg_replace('/\(\?P<([a-zA-Z0-9_]+)>/', '(', $pattern);
-        // Добавляем ограничения по умолчанию
-        $pattern = preg_replace('/\(\?P<([a-zA-Z0-9_]+)>/', '([^\/]+)', $pattern);
 
-        return '/^' . $pattern . '$/u'; // u = UTF-8 поддержка
+        // Заменяем {parameter} на ([^\/]+)
+        // Заменяем {parameter:regex} на (regex)
+        $pattern = preg_replace_callback('/\\\{([a-zA-Z0-9_]+)(?::([^}]+))?\\\}/', function ($matches) {
+            $constraint = $matches[2] ?? '[^\/]+';
+            return '(' . $constraint . ')';
+        }, $pattern);
+        return '/^' . $pattern . '$/u';
     }
 
     private function getParamNames(string $uri): array

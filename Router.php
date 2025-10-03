@@ -111,12 +111,10 @@ class Router
         $request = $this->application->container->make(Request::class);
         $method = $request->getMethod();
         $path = $request->getPathInfo();
-
         // Быстрая проверка: есть ли маршруты для метода?
         if (empty($this->routes[$method])) {
             return $this->handleNotFound($request);
         }
-
         foreach ($this->routes[$method] as $route) {
             if ($route->matches($path, $params)) {
                 return $this->handleFoundRoute($route, $params, $request);
@@ -126,26 +124,25 @@ class Router
         return $this->handleNotFound($request);
     }
 
+    /**
+     * @throws ReflectionException
+     */
     private function handleFoundRoute(Route $route, array $params, Request $request): Response
     {
         $definition = $route->getDefinition();
-
-        // Применяем middleware маршрута
         $this->applyMiddleware($definition->middleware);
 
         $action = $definition->getRawAction();
 
-        // Обработка Closure
         if ($definition->isClosure()) {
             $result = $action();
             return $this->makeResponse($result);
         }
 
-        // Обработка контроллеров
         [$controller, $method] = $this->parseAction($action);
-        $controllerInstance = $this->application->container->make($controller);
-        $result = $this->callControllerMethod($controllerInstance, $method, $params, $request);
 
+        // Передаём $controller как есть (строка или объект)
+        $result = $this->callControllerMethod($controller, $method, $params, $request);
         return $this->makeResponse($result);
     }
 
@@ -173,9 +170,23 @@ class Router
         throw new \InvalidArgumentException('Неподдерживаемый формат действия маршрута');
     }
 
-    private function callControllerMethod(object $controller, string $method, array $routeParams, Request $request)
+    /**
+     * @throws ReflectionException
+     */
+    private function callControllerMethod($controller, string $method, array $routeParams, Request $request)
     {
-        $reflection = new \ReflectionMethod($controller, $method);
+        // Если $controller — строка, создаём экземпляр через контейнер
+        if (is_string($controller)) {
+            $controllerInstance = $this->application->container->make($controller);
+        }
+        // Если $controller — уже объект, используем его напрямую
+        elseif (is_object($controller)) {
+            $controllerInstance = $controller;
+        } else {
+            throw new \RuntimeException('Controller должен быть строкой или объектом');
+        }
+
+        $reflection = new \ReflectionMethod($controllerInstance, $method);
         $args = [];
 
         foreach ($reflection->getParameters() as $param) {
@@ -209,10 +220,10 @@ class Router
                 continue;
             }
 
-            throw new \RuntimeException("Не удалось разрешить параметр \${$name} для " . get_class($controller) . "::$method()");
+            throw new \RuntimeException("Не удалось разрешить параметр \${$name} для " . get_class($controllerInstance) . "::$method()");
         }
 
-        return $reflection->invokeArgs($controller, $args);
+        return $reflection->invokeArgs($controllerInstance, $args);
     }
 
     private function handleNotFound(Request $request): Response
