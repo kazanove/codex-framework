@@ -151,10 +151,20 @@ class Debug
      */
     public function handleException(Throwable $e): void
     {
-        if (PHP_SAPI === 'cli') {
-            $this->renderCliException($e);
+        // Всегда логируем ошибку (даже в production)
+        $this->logException($e);
+
+        if ($this->enabled) {
+            // В debug-режиме показываем красивую страницу
+            if (PHP_SAPI === 'cli') {
+                $this->renderCliException($e);
+            } else {
+                $this->renderHtmlException($e);
+            }
         } else {
-            $this->renderHtmlException($e);
+            // В production — стандартная ошибка 500
+            http_response_code(500);
+            echo '<h1>Серверная ошибка</h1>';
         }
     }
 
@@ -330,5 +340,36 @@ class Debug
             set_error_handler([$this, 'handlerError']);
             set_exception_handler([$this, 'handleException']);
         }
+    }
+    /**
+     * Логирует ошибку в файл с ротацией по дате
+     */
+    private function logException(Throwable $e): void
+    {
+        if ($this->logPath === null) {
+            return;
+        }
+
+        // Убеждаемся, что это директория (а не файл)
+        $logDir = is_file($this->logPath) ? dirname($this->logPath) : $this->logPath;
+
+        if (!is_dir($logDir) && !mkdir($logDir, 0755, true) && !is_dir($logDir)) {
+            return; // Не можем создать директорию — пропускаем логирование
+        }
+
+        $date = date('Y-m-d');
+        $logFile = $logDir . DIRECTORY_SEPARATOR . 'error-' . $date . '.log';
+
+        $message = sprintf(
+            "[%s] %s: %s in %s:%d\nStack trace:\n%s\n---\n",
+            date('Y-m-d H:i:s'),
+            get_class($e),
+            $e->getMessage(),
+            $e->getFile(),
+            $e->getLine(),
+            $e->getTraceAsString()
+        );
+
+        file_put_contents($logFile, $message, FILE_APPEND | LOCK_EX);
     }
 }
