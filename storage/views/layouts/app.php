@@ -38,14 +38,14 @@
 
 <div class="container">
     @if (flash('success'))
-        @component('components.alert', ['type' => 'success', 'title' => 'Успех!'])
-            {{ flash('success') }}
+        @component('alert', ['type' => 'success', 'title' => 'Успех!'])
+            Данные успешно сохранены!
         @endcomponent
     @endif
 
     @if (flash('error'))
-        @component('alert', ['type' => 'danger', 'title' => 'Ошибка!'])
-            {{ flash('error') }}
+        @component('alert', ['type' => 'success', 'title' => 'Успех!'])
+            Данные успешно сохранены!
         @endcomponent
     @endif
 
