@@ -49,7 +49,7 @@ class View
             throw new RuntimeException("Директория фреймворка не найдена: {$this->frameworkViewPath}");
         }
 
-// Проверка на directory traversal
+        // Проверка на directory traversal
         $realAppPath = realpath($this->appViewPath);
         $realFrameworkPath = $this->frameworkViewPath ? realpath($this->frameworkViewPath) : '';
 
@@ -222,7 +222,6 @@ class View
     {
         $cacheFile = $this->getCachePath($templatePath);
         $sourceFile = $this->findSourcePath($templatePath);
-
         if (!$this->isCacheFresh($templatePath, $sourceFile)) {
             $this->compileTemplate($templatePath, $sourceFile, $cacheFile);
         }
@@ -331,7 +330,6 @@ class View
         if ($result === false) {
             throw new RuntimeException("Не удалось записать кэш шаблона: {$cacheFile}");
         }
-
         $this->saveManifest($template, Compiler::getCurrentDependencies());
     }
 
@@ -354,7 +352,10 @@ class View
             }
         }
 
-        $manifest[$template] = ['dependencies' => array_values(array_unique($dependencies)), 'compiled_at' => time()];
+        $manifest[$template] = [
+            'dependencies' => array_values(array_unique($dependencies)),
+            'compiled_at' => time()
+        ];
 
         file_put_contents($manifestPath, json_encode($manifest, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
@@ -425,7 +426,7 @@ class View
     {
         try {
 // Проверка, что класс реализует ComponentInterface
-            if (!in_array(ComponentInterface::class, class_implements($componentClass))) {
+            if (!in_array(ComponentInterface::class, class_implements($componentClass), true)) {
                 throw new RuntimeException("Класс компонента должен реализовывать ComponentInterface: {$componentClass}");
             }
 
@@ -474,6 +475,9 @@ class View
         return $component->render();
     }
 
+    /**
+     * @throws Throwable
+     */
     public function render(string $template, array $data = []): string
     {
         try {
@@ -487,7 +491,6 @@ class View
                 throw $e;
             }
 
-            error_log("View rendering error: " . $e->getMessage());
             return '<div class="error">Ошибка отображения страницы</div>';
         }
     }
@@ -501,6 +504,9 @@ class View
         $this->currentPushStack = '';
     }
 
+    /**
+     * @throws JsonException
+     */
     private function renderTemplate(string $template, array $data): string
     {
         return $this->extracted($template, $data);

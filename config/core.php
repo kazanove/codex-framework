@@ -7,26 +7,15 @@ return[
         \CodeX\Providers\Response::class,
         \CodeX\Providers\Logger::class,
         \CodeX\Providers\Debug::class,
+        \CodeX\Providers\LogViewer::class,
         \CodeX\Providers\Router::class,
+        \CodeX\Providers\View::class,
+        \CodeX\Providers\Auth::class,
     ],
     'app' => [
-        'debug' => true,
-        'log_path' => dirname(__DIR__) . '/storage/logs/app.log',
-        'debug_log_path' => __DIR__ . '/storage/logs/debug',
+        'debug' => false,
     ],
     'shutdown'=>[
         [\CodeX\Http\Response::class, 'send'],
-    ],
-    'middleware' => [
-        \CodeX\Middleware\Cors::class,
-    ],
-    'error_pages' => [
-        '404' => static function (\CodeX\Http\Request $request) {
-            return '<h1>Страница не найдена</h1><p>URL: ' . htmlspecialchars($request->getPathInfo()) . '</p>';
-        },
-        // Можно также указать:
-        // '404' => [App\Controllers\ErrorController::class, 'notFound'],
-        // '404' => 'App\Controllers\ErrorController@notFound',
-        // '404' => __DIR__ . '/views/errors/404.html',
     ],
 ];

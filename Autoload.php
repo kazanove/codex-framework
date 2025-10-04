@@ -115,7 +115,6 @@ class Autoload
         foreach ($this->dirs as $dir) {
             // Преобразуем имя класса в путь к файлу
             $file = $dir . str_replace('\\', DIRECTORY_SEPARATOR, $className) . '.php';
-
             // Если файл существует — подключаем его и выходим
             if (is_file($file)) {
                 $this->classMap[$className] = $file;

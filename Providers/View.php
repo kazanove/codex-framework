@@ -10,8 +10,8 @@ class View extends Provider
 {
     public function register(): void
     {
-        $appViewPath = $this->application->dirApp . 'views' . DIRECTORY_SEPARATOR;
-        $frameworkViewPath = ROOT . 'CodeX' . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR;
+        $appViewPath = $this->application->dirApp .'storage' . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR;
+        $frameworkViewPath = ROOT . 'CodeX' . DIRECTORY_SEPARATOR .'storage' . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR;
         $cachePath = $this->application->dirApp . 'storage' . DIRECTORY_SEPARATOR . 'framework' . DIRECTORY_SEPARATOR . 'views' . DIRECTORY_SEPARATOR;
 
         $this->application->container->singleton(\CodeX\View::class, function () use ($appViewPath, $frameworkViewPath, $cachePath) {
