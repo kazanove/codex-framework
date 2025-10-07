@@ -20,16 +20,17 @@ class Response
 
     public function send(): void
     {
-        if (!headers_sent()) {
-            if (!isset($this->header['Content-Type'])) {
-                $this->header('Content-Type', 'text/html; charset=utf-8');
-            }
-            http_response_code($this->statusCode);
-            foreach ($this->headers as $name => $value) {
-                header($name . ': ' . $value, true);
-            }
-        }
-        echo $this->content;
+//        if (!headers_sent()) {
+//            if (!isset($this->header['Content-Type'])) {
+//                $this->header('Content-Type', 'text/html; charset=utf-8');
+//            }
+//            http_response_code($this->statusCode);
+//            foreach ($this->headers as $name => $value) {
+//                header($name . ': ' . $value, true);
+//            }
+//        }
+//
+//        echo $this->content;
     }
 
     public function getContent(): string

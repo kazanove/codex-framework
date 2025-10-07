@@ -86,6 +86,7 @@ class Application
             if (!method_exists($middlewareClass, 'handle')) {
                 throw new RuntimeException('Промежуточное программное обеспечение должно иметь метод handle: ' . $middlewareClass);
             }
+
             $this->container->call([$middlewareClass, 'handle']);
         }
         foreach ($this->providers as $provider) {

@@ -49,7 +49,7 @@ class View
             throw new RuntimeException("Директория фреймворка не найдена: {$this->frameworkViewPath}");
         }
 
-        // Проверка на directory traversal
+// Проверка на directory traversal
         $realAppPath = realpath($this->appViewPath);
         $realFrameworkPath = $this->frameworkViewPath ? realpath($this->frameworkViewPath) : '';
 
@@ -251,10 +251,7 @@ class View
         throw new RuntimeException("Шаблон не найден: {$template} (искал в: {$appPath}" . ($this->frameworkViewPath ? " и {$frameworkPath}" : "") . ")");
     }
 
-    /**
-     * @throws JsonException
-     */
-    private function isCacheFresh(string $template, string $sourceFile): bool
+     private function isCacheFresh(string $template, string $sourceFile): bool
     {
         $cacheFile = $this->getCachePath($template);
         if (!file_exists($cacheFile) || !file_exists($sourceFile)) {
@@ -352,10 +349,7 @@ class View
             }
         }
 
-        $manifest[$template] = [
-            'dependencies' => array_values(array_unique($dependencies)),
-            'compiled_at' => time()
-        ];
+        $manifest[$template] = ['dependencies' => array_values(array_unique($dependencies)), 'compiled_at' => time()];
 
         file_put_contents($manifestPath, json_encode($manifest, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
@@ -482,7 +476,17 @@ class View
     {
         try {
             $this->resetState();
-            return $this->renderTemplate($template, $data);
+
+// Сначала рендерим дочерний шаблон (он заполнит секции и установит layout)
+            $childContent = $this->extracted($template, $data);
+
+// Если установлен layout — рендерим родительский шаблон
+            if ($this->layout) {
+                return $this->extracted($this->layout, $data);
+            }
+
+// Иначе возвращаем результат дочернего шаблона
+            return $childContent;
         } catch (Throwable $e) {
             $this->safeEndAllSections();
             $this->resetState();
@@ -502,14 +506,6 @@ class View
         $this->currentSection = '';
         $this->pushes = [];
         $this->currentPushStack = '';
-    }
-
-    /**
-     * @throws JsonException
-     */
-    private function renderTemplate(string $template, array $data): string
-    {
-        return $this->extracted($template, $data);
     }
 
     public function safeEndAllSections(): void
@@ -738,6 +734,14 @@ class View
     {
         $loop = $this->getLastLoop();
         return $loop ? $loop['iteration'] : 0;
+    }
+
+    /**
+     * @throws JsonException
+     */
+    private function renderTemplate(string $template, array $data): string
+    {
+        return $this->extracted($template, $data);
     }
 }
 
