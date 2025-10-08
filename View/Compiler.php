@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace CodeX\View;
@@ -51,9 +52,7 @@ class Compiler
 
     public static function compile(string $source, string $currentTemplate, string $viewPath): string
     {
-
-
-// Проверка на циклические зависимости
+        // Проверка на циклические зависимости
         if (in_array($currentTemplate, self::$compilationStack, true)) {
             $stack = implode(' -> ', self::$compilationStack) . ' -> ' . $currentTemplate;
             throw new RuntimeException("Обнаружена циклическая зависимость в шаблонах: {$stack}");
@@ -76,13 +75,25 @@ class Compiler
             self::$includedTemplates = [];
             self::$currentDependencies = [$currentTemplate];
 
-// Обработка @verbatim блоков в первую очередь
+            // Обработка @verbatim блоков в первую очередь
             $source = self::processVerbatimBlocks($source);
 
-// Удаляем Blade-подобные комментарии
-            $source = preg_replace('/{{--.*?--}}/s', '', $source);
+            // Удаляем Blade-подобные комментарии
+            $source = preg_replace('~{{--.*?--}}~s', '', $source);
 
-// Разбиваем на строки
+            // Обработка @yield (специальная логика)
+            $source = preg_replace_callback(
+                '~@yield\s*\(\s*[\'"]([^\'"]+)[\'"](?:\s*,\s*([\'"])(.*?)\2)?\s*\)~s',
+                function ($matches) {
+                    $section = $matches[1];
+                    $default = $matches[3] ?? '';
+                    $default = addslashes($default);
+                    return '<?php echo $view->yieldSection("' . $section . '", "' . $default . '"); ?>';
+                },
+                $source
+            );
+
+            // Разбиваем на строки
             $lines = explode("\n", $source);
             $compiledLines = [];
             $inSection = false;
@@ -94,8 +105,8 @@ class Compiler
                 $trimmedLine = trim($line);
 
                 try {
-// Обработка @section
-                    if (preg_match("/@section\s*\(\s*['\"](.+?)['\"]\s*\)/", $trimmedLine, $matches)) {
+                    // Обработка @section
+                    if (preg_match("~@section\s*\(\s*['\"](.+?)['\"]\s*\)~", $trimmedLine, $matches)) {
                         if ($inSection) {
                             throw new RuntimeException("Вложенные секции не поддерживаются. Секция '{$sectionName}' не закрыта перед началом '{$matches[1]}'");
                         }
@@ -106,8 +117,8 @@ class Compiler
                         continue;
                     }
 
-// Обработка @endsection
-                    if (preg_match("/^@endsection\s*(?:#.*)?$/", $trimmedLine)) {
+                    // Обработка @endsection
+                    if (preg_match("~^@endsection\s*(?:#.*)?$~", $trimmedLine)) {
                         if ($inSection) {
                             $compiledContent = self::compileDirectives($sectionContent);
                             $compiledLines[] = '<?php $view->startSection("' . $sectionName . '"); ?>' . $compiledContent . '<?php $view->endSection(); ?>';
@@ -115,40 +126,19 @@ class Compiler
                             $sectionContent = '';
                             array_pop($sectionStack);
                         } else {
-// Игнорируем @endsection без открытой секции вместо ошибки
+                            // Игнорируем @endsection без открытой секции вместо ошибки
                             $compiledLines[] = "<!-- @endsection без @section проигнорирован -->";
                         }
                         continue;
                     }
 
-// Обработка @extends
-                    if (preg_match("/@extends\s*\(\s*['\"](.+?)['\"]\s*\)/", $trimmedLine, $matches)) {
+                    // Обработка @extends
+                    if (preg_match("~@extends\s*\(\s*['\"](.+?)['\"]\s*\)~", $trimmedLine, $matches)) {
                         $compiledLines[] = '<?php $view->extendsLayout("' . $matches[1] . '"); ?>';
                         continue;
                     }
 
-// Обработка @yield с улучшенной поддержкой строк с пробелами
-                    if (preg_match("/@yield\s*\(\s*['\"](.+?)['\"]\s*(?:,\s*(.+?))?\s*\)/", $trimmedLine, $matches)) {
-                        $sectionName = $matches[1];
-                        $default = "''";
-
-                        if (isset($matches[2])) {
-// Обрабатываем значение по умолчанию, которое может содержать пробелы
-                            $defaultValue = trim($matches[2]);
-                            if (preg_match("/^['\"](.*)['\"]$/", $defaultValue, $defaultMatches)) {
-// Если значение в кавычках, извлекаем его и экранируем
-                                $default = "'" . addslashes($defaultMatches[1]) . "'";
-                            } else {
-// Если нет кавычек, используем как есть (для переменных)
-                                $default = $defaultValue;
-                            }
-                        }
-
-                        $compiledLines[] = '<?php echo $view->yieldSection("' . $sectionName . '", ' . $default . '); ?>';
-                        continue;
-                    }
-
-// Обработка остального контента
+                    // Обработка остального контента
                     if ($inSection) {
                         $sectionContent .= $line . "\n";
                     } else {
@@ -160,7 +150,7 @@ class Compiler
                 }
             }
 
-// Проверяем незакрытые секции
+            // Проверяем незакрытые секции
             if ($inSection) {
                 throw new RuntimeException("Незакрытая секция: '{$sectionName}'");
             }
@@ -183,7 +173,7 @@ class Compiler
 
     private static function processVerbatimBlocks(string $source): string
     {
-        return preg_replace_callback('/@verbatim\s*(.*?)@endverbatim/s', static function ($matches) {
+        return preg_replace_callback('~@verbatim\s*(.*?)@endverbatim~s', static function ($matches) {
             return $matches[1];
         }, $source);
     }
@@ -193,9 +183,9 @@ class Compiler
         $originalSource = $source;
 
         try {
-// Обработка пользовательских директив
+            // Обработка пользовательских директив
             foreach (self::$customDirectives as $name => $handler) {
-                $pattern = '/@' . preg_quote($name, '/') . '(?:\s*\((.*?)\))?/s';
+                $pattern = '~@' . preg_quote($name, '~') . '(?:\s*\((.*?)\))?~s';
                 $source = preg_replace_callback($pattern, static function ($matches) use ($handler, $name) {
                     $params = $matches[1] ?? '';
                     $result = $handler($params);
@@ -206,112 +196,126 @@ class Compiler
                 }, $source);
             }
 
-// Обработка @csrf
-            $source = preg_replace_callback('/@csrf(?=\s|$)/', static function ($matches) {
+            // Обработка @csrf
+            $source = preg_replace_callback('~@csrf(?=\s|$)~', static function ($matches) {
                 return '<?= \\CodeX\\View::csrfField() ?>';
             }, $source);
 
-// Обработка {{ }} с экранированием
-            $source = preg_replace_callback('/{{\s*(.+?)\s*}}/s', static function ($matches) {
+            // Обработка {{ }} с экранированием
+            $source = preg_replace_callback('~{{\s*(.+?)\s*}}~s', static function ($matches) {
                 $expression = trim($matches[1]);
                 return self::compileEcho($expression);
             }, $source);
 
-// Обработка {!! !!} без экранирования
-            $source = preg_replace_callback('/{!!\s*(.+?)\s*!!}/s', static function ($matches) {
+            // Обработка {!! !!} без экранирования
+            $source = preg_replace_callback('~{!!\s*(.+?)\s*!!}~s', static function ($matches) {
                 return '<?= ' . trim($matches[1]) . ' ?>';
             }, $source);
 
-// Обработка @json
-            $source = preg_replace_callback('/@json\s*\(\s*(.+?)(?:\s*,\s*(.+?))?\s*\)/s', static function ($matches) {
+            // Обработка @json
+            $source = preg_replace_callback('~@json\s*\(\s*(.+?)(?:\s*,\s*(.+?))?\s*\)~s', static function ($matches) {
                 $expression = trim($matches[1]);
                 $flags = isset($matches[2]) ? trim($matches[2]) : 'JSON_THROW_ON_ERROR';
                 return '<?= \\CodeX\\View::toJson(' . $expression . ', ' . $flags . ') ?>';
             }, $source);
 
-// Структурные директивы
-            $directives = [// Условные операторы
-                '/@if\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/' => '<?php if ($1): ?>', '/@elseif\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/' => '<?php elseif ($1): ?>', '/@else\b/' => '<?php else: ?>', '/@endif\b/' => '<?php endif; ?>',
+            // Структурные директивы (БЕЗ @yield - он обрабатывается отдельно!)
+            $directives = [
+                // Условные операторы
+                '~@if\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)~' => '<?php if ($1): ?>',
+                '~@elseif\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)~' => '<?php elseif ($1): ?>',
+                '~@else\b~' => '<?php else: ?>',
+                '~@endif\b~' => '<?php endif; ?>',
 
-// Циклы
-                '/@foreach\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/' => '<?php foreach ($1): ?>', '/@endforeach\b/' => '<?php endforeach; ?>', '/@for\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/' => '<?php for ($1): ?>', '/@endfor\b/' => '<?php endfor; ?>', '/@while\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)/' => '<?php while ($1): ?>', '/@endwhile\b/' => '<?php endwhile; ?>',
+                // Циклы
+                '~@foreach\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)~' => '<?php foreach ($1): ?>',
+                '~@endforeach\b~' => '<?php endforeach; ?>',
+                '~@for\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)~' => '<?php for ($1): ?>',
+                '~@endfor\b~' => '<?php endfor; ?>',
+                '~@while\s*\(((?:[^()]|\((?:[^()]|\([^()]*\))*\))*)\)~' => '<?php while ($1): ?>',
+                '~@endwhile\b~' => '<?php endwhile; ?>',
 
-// Break/Continue
-                '/@break\b/' => '<?php break; ?>', '/@continue\b/' => '<?php continue; ?>',
+                // Break/Continue
+                '~@break\b~' => '<?php break; ?>',
+                '~@continue\b~' => '<?php continue; ?>',
 
-// Авторизация
-                '/@auth\b/' => '<?php if (\\CodeX\\View::checkAuth()): ?>', '/@endauth\b/' => '<?php endif; ?>', '/@guest\b/' => '<?php if (!\\CodeX\\View::checkAuth()): ?>', '/@endguest\b/' => '<?php endif; ?>',];
+                // Авторизация
+                '~@auth\b~' => '<?php if (\\CodeX\\View::checkAuth()): ?>',
+                '~@endauth\b~' => '<?php endif; ?>',
+                '~@guest\b~' => '<?php if (!\\CodeX\\View::checkAuth()): ?>',
+                '~@endguest\b~' => '<?php endif; ?>',
+            ];
 
             foreach ($directives as $pattern => $replacement) {
                 $source = preg_replace($pattern, $replacement, $source);
             }
 
-// Обработка @parent для наследования секций
-            $source = preg_replace_callback('/@parent\b/', static function ($matches) {
+            // Обработка @parent для наследования секций
+            $source = preg_replace_callback('~@parent\b~', static function ($matches) {
                 return '<?php echo $view->yieldSection($view->currentSection); ?>';
             }, $source);
 
-// Обработка @can/@cannot с улучшенным парсингом
-            $source = preg_replace_callback("/@can\s*\(\s*([\"'])(.*?)\\1\s*(?:,\s*(.*?))?\s*\)/s", static function ($matches) {
+            // Обработка @can/@cannot с улучшенным парсингом
+            $source = preg_replace_callback("~@can\s*\(\s*([\"'])(.*?)\\1\s*(?:,\s*(.*?))?\s*\)~s", static function ($matches) {
                 $ability = $matches[2];
                 $arguments = isset($matches[3]) ? ', ' . trim($matches[3]) : '';
                 return '<?php if (\\CodeX\\Auth\\Gate::allows("' . $ability . '"' . $arguments . ')): ?>';
             }, $source);
 
-            $source = preg_replace_callback("/@cannot\s*\(\s*([\"'])(.*?)\\1\s*(?:,\s*(.*?))?\s*\)/s", static function ($matches) {
+            $source = preg_replace_callback("~@cannot\s*\(\s*([\"'])(.*?)\\1\s*(?:,\s*(.*?))?\s*\)~s", static function ($matches) {
                 $ability = $matches[2];
                 $arguments = isset($matches[3]) ? ', ' . trim($matches[3]) : '';
                 return '<?php if (\\CodeX\\Auth\\Gate::denies("' . $ability . '"' . $arguments . ')): ?>';
             }, $source);
 
-            $source = preg_replace('/@endcan\b/', '<?php endif; ?>', $source);
-            $source = preg_replace('/@endcannot\b/', '<?php endif; ?>', $source);
+            $source = preg_replace('~@endcan\b~', '<?php endif; ?>', $source);
+            $source = preg_replace('~@endcannot\b~', '<?php endif; ?>', $source);
 
-// Компоненты
-            $source = preg_replace_callback("/@component\s*\(\s*([\"'])(.+?)\\1\s*(?:,\s*(.*?))?\s*\)/s", static function ($matches) {
+            // Компоненты
+            $source = preg_replace_callback("~@component\s*\(\s*([\"'])(.+?)\\1\s*(?:,\s*(.*?))?\s*\)~s", static function ($matches) {
                 $component = $matches[2];
                 $data = isset($matches[3]) ? trim($matches[3]) : '[]';
                 return "<?php \$view->startComponent('{$component}', {$data}); ?>";
             }, $source);
 
-            $source = preg_replace('/@endcomponent\b/', '<?php echo $view->renderComponent(); ?>', $source);
+            $source = preg_replace('~@endcomponent\b~', '<?php echo $view->renderComponent(); ?>', $source);
 
-// Слоты компонентов
-            $source = preg_replace_callback("/@slot\s*\(\s*([\"'])(.+?)\\1\s*\)/s", static function ($matches) {
+            // Слоты компонентов
+            $source = preg_replace_callback("~@slot\s*\(\s*([\"'])(.+?)\\1\s*\)~s", static function ($matches) {
                 return "<?php \$view->slot('{$matches[2]}'); ?>";
             }, $source);
 
-            $source = preg_replace('/@endslot\b/', '<?php $view->endSlot(); ?>', $source);
+            $source = preg_replace('~@endslot\b~', '<?php $view->endSlot(); ?>', $source);
 
-// Специальные директивы для слотов компонентов (без экранирования)
-            $source = preg_replace_callback('/@componentSlot\s*\(\s*[\'"](.+?)[\'"]\s*(?:,\s*[\'"](.*?)[\'"]\s*)?\)/', static function ($matches) {
+            // Специальные директивы для слотов компонентов (без экранирования)
+            $source = preg_replace_callback('~@componentSlot\s*\(\s*[\'"](.+?)[\'"]\s*(?:,\s*[\'"](.*?)[\'"]\s*)?\)~', static function ($matches) {
                 $slotName = $matches[1];
                 $default = isset($matches[2]) ? "'" . addslashes($matches[2]) . "'" : "''";
                 return '<?= $component->getSlot("' . $slotName . '", ' . $default . ') ?>';
             }, $source);
 
-            $source = preg_replace_callback('/@hasComponentSlot\s*\(\s*[\'"](.+?)[\'"]\s*\)/', static function ($matches) {
+            $source = preg_replace_callback('~@hasComponentSlot\s*\(\s*[\'"](.+?)[\'"]\s*\)~', static function ($matches) {
                 $slotName = $matches[1];
                 return '<?php if ($component->hasSlot("' . $slotName . '")): ?>';
             }, $source);
 
-            $source = preg_replace('/@endHasComponentSlot/', '<?php endif; ?>', $source);
+            $source = preg_replace('~@endHasComponentSlot~', '<?php endif; ?>', $source);
 
-// Включения
-            $source = preg_replace_callback("/@include\s*\(\s*([\"'])(.+?)\\1\s*(?:,\s*(.*?))?\s*\)/s", static function ($matches) {
+            // Включения
+            $source = preg_replace_callback("~@include\s*\(\s*([\"'])(.+?)\\1\s*(?:,\s*(.*?))?\s*\)~s", static function ($matches) {
                 $template = $matches[2];
                 $data = isset($matches[3]) ? trim($matches[3]) : '[]';
                 self::$includedTemplates[] = $template;
                 return "<?= \$view->makePartial('{$template}', {$data}) ?>";
             }, $source);
 
-// Push/Stack
-            $source = preg_replace("/@push\s*\(\s*([\"'])(.+?)\\1\s*\)/", '<?php $view->startPush("$2"); ?>', $source);
-            $source = preg_replace('/@endpush\b/', '<?php $view->endPush(); ?>', $source);
-            $source = preg_replace("/@stack\s*\(\s*([\"'])(.+?)\\1\s*\)/", '<?php echo $view->yieldPush("$2"); ?>', $source);
+            // Push/Stack
+            $source = preg_replace("~@push\s*\(\s*([\"'])(.+?)\\1\s*\)~", '<?php $view->startPush("$2"); ?>', $source);
+            $source = preg_replace('~@endpush\b~', '<?php $view->endPush(); ?>', $source);
+            $source = preg_replace("~@stack\s*\(\s*([\"'])(.+?)\\1\s*\)~", '<?php echo $view->yieldPush("$2"); ?>', $source);
 
-// PHP блоки
-            $source = preg_replace_callback('/@php\s*(.*?)@endphp/s', static function ($matches) {
+            // PHP блоки
+            $source = preg_replace_callback('~@php\s*(.*?)@endphp~s', static function ($matches) {
                 return '<?php ' . $matches[1] . ' ?>';
             }, $source);
 
@@ -323,7 +327,7 @@ class Compiler
 
     private static function compileEcho(string $expression): string
     {
-// Предварительная обработка строковых литералов
+        // Предварительная обработка строковых литералов
         $expression = self::preserveStringLiterals($expression);
 
         if (!str_contains($expression, '|')) {
@@ -393,7 +397,7 @@ class Compiler
             $char = $expression[$i];
             $prevChar = $i > 0 ? $expression[$i - 1] : '';
 
-// Отслеживаем кавычки (игнорируем экранированные)
+            // Отслеживаем кавычки (игнорируем экранированные)
             if ($char === "'" && !$inDoubleQuote && !$inBacktick && $prevChar !== '\\') {
                 $inSingleQuote = !$inSingleQuote;
             } elseif ($char === '"' && !$inSingleQuote && !$inBacktick && $prevChar !== '\\') {
@@ -402,7 +406,7 @@ class Compiler
                 $inBacktick = !$inBacktick;
             }
 
-// Отслеживаем скобки только вне строк
+            // Отслеживаем скобки только вне строк
             if (!$inSingleQuote && !$inDoubleQuote && !$inBacktick) {
                 if ($char === '(') {
                     $depth++;

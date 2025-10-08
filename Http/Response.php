@@ -9,28 +9,23 @@ class Response
     public string $content = '';
     private array $headers = [];
 
-    public function __construct()
-    {
-        $header = headers_list();
-        foreach ($header as $param) {
-            [$key, ] = explode(':', $param);
-            header_remove(trim($key));
-        }
-    }
-
     public function send(): void
     {
-//        if (!headers_sent()) {
-//            if (!isset($this->header['Content-Type'])) {
-//                $this->header('Content-Type', 'text/html; charset=utf-8');
-//            }
-//            http_response_code($this->statusCode);
-//            foreach ($this->headers as $name => $value) {
-//                header($name . ': ' . $value, true);
-//            }
-//        }
-//
-//        echo $this->content;
+        $this->headerRemove('X-Powered-By');
+        $this->headerRemove('Expires');
+        $this->headerRemove('Cache-Control');
+        $this->headerRemove('Pragma');
+        if (!headers_sent()) {
+            if (!isset($this->headers['Content-Type'])) {
+                $this->header('Content-Type', 'text/html; charset=utf-8');
+            }
+            http_response_code($this->statusCode);
+            foreach ($this->headers as $name => $value) {
+                header($name . ': ' . $value, true);
+            }
+        }
+
+        echo $this->content;
     }
 
     public function getContent(): string
@@ -54,15 +49,20 @@ class Response
         $this->statusCode = $code;
         return $this;
     }
-    public function redirect(string $url, int $statusCode = 302): self
+    public function redirect(string $url, int $statusCode = 302): void
     {
         $this->setStatusCode($statusCode);
         $this->header('Location', $url);
-        return $this;
+        die();
     }
 
     public function getHeaders():array
     {
         return $this->headers;
+    }
+
+    public function headerRemove(string $key): void
+    {
+        header_remove($key);
     }
 }
