@@ -3,17 +3,16 @@ declare(strict_types=1);
 
 namespace CodeX\Database;
 
-use PDO;
 use RuntimeException;
 
 class ConnectionFactory
 {
     public static function make(array $config): ConnectionInterface
     {
-        return match ($config['database']['driver']) {
-            'mysql' => new MySqlConnection($config),
-            'sqlite' => new SqliteConnection($config),
-            'pgsql' => new PgsqlConnection($config),
+        return match ($config['driver']) {
+            'mysql' => new Connection\MySql($config),
+            'sqlite' => new Connection\Sqlite($config),
+            'pgsql' => new Connection\Pgsql($config),
             default => throw new RuntimeException("Драйвер {$config['driver']} не поддерживается"),
         };
     }

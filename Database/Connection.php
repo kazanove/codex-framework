@@ -25,7 +25,7 @@ class Connection
     public static function getInstance(): ConnectionInterface
     {
         if (self::$instance === null) {
-            $config = Application::getInstance()->config;
+            $config = Application::getInstance()->config['database'];
             $dbConfig = $config['connections'][$config['default']];
             self::$instance = ConnectionFactory::make($dbConfig);
         }

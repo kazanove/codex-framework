@@ -21,3 +21,12 @@ function app(string $service)
 {
     return Application::getInstance()->container->make($service);
 }
+
+function dd(mixed ...$values): never
+{
+    $debug = \CodeX\Application::getInstance()->container->make(\CodeX\Debug::class);
+    foreach ($values as $value) {
+        $debug->dump($value);
+    }
+    exit(1);
+}

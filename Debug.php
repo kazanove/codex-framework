@@ -54,10 +54,11 @@ class Debug
         if (PHP_SAPI === 'cli') {
             echo $output . PHP_EOL;
         } else {
-            echo "<pre style='background:#f4f4f4; padding:10px; border-left:4px solid #4CAF50; font-family:monospace; white-space:pre-wrap;'>";
+            echo "<pre style='color:#000000; background:#f4f4f4; padding:10px; border-left:4px solid #4CAF50; font-family:monospace; white-space:pre-wrap;'>";
             echo $output;
             echo "</pre>";
         }
+        exit();
     }
 
     /**
