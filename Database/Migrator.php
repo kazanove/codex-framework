@@ -12,41 +12,67 @@ class Migrator
     {
         $this->migrationsPath = $migrationsPath;
 
-        // Получаем конфигурацию БД
-        $configPath = dirname(__DIR__) . '/config/database.php';
+        // Загружаем конфигурацию
+        $configPath = ROOT . 'CodeX/config/core.php';
         if (!file_exists($configPath)) {
-            throw new \RuntimeException("Файл конфигурации БД не найден: {$configPath}");
+            throw new \RuntimeException("Файл конфигурации не найден: {$configPath}");
         }
 
         $config = require $configPath;
-        $dbConfig = $config['connections'][$config['default']];
+        $dbConfig = $config['database']['connections'][$config['database']['default']];
 
-        // Создаём PDO напрямую
-        $driver = $dbConfig['driver'];
-        $dsn = match ($driver) {
-            'mysql' => "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset={$dbConfig['charset']}",
-            'pgsql' => "pgsql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};user={$dbConfig['username']};password={$dbConfig['password']}",
-            'sqlite' => "sqlite:{$dbConfig['database']}",
-            default => throw new \RuntimeException("Драйвер {$driver} не поддерживается в миграциях"),
-        };
-        $this->pdo = new \PDO($dsn, $dbConfig['username'], $dbConfig['password'], [
-            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
-            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
-        ]);
+        // Создаём БД если её нет (только для MySQL/PostgreSQL)
+        $this->createDatabaseIfNotExists($dbConfig);
+
+        // Подключаемся к БД
+        $this->connectToDatabase($dbConfig);
 
         $this->createMigrationsTable();
     }
 
     private function createMigrationsTable(): void
     {
-        $sql = "
-            CREATE TABLE IF NOT EXISTS migrations (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                migration VARCHAR(255) NOT NULL,
-                batch INT NOT NULL
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-        ";
+        $driver = $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        switch ($driver) {
+            case 'mysql':
+                $sql = "
+                CREATE TABLE IF NOT EXISTS migrations (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    migration VARCHAR(255) NOT NULL,
+                    batch INT NOT NULL
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ";
+                break;
+
+            case 'pgsql':
+                $sql = "
+                CREATE TABLE IF NOT EXISTS migrations (
+                    id SERIAL PRIMARY KEY,
+                    migration VARCHAR(255) NOT NULL,
+                    batch INTEGER NOT NULL
+                );
+            ";
+                break;
+
+            case 'sqlite':
+                $sql = "
+                CREATE TABLE IF NOT EXISTS migrations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    migration VARCHAR(255) NOT NULL,
+                    batch INTEGER NOT NULL
+                );
+            ";
+                break;
+
+            default:
+                throw new \RuntimeException("Драйвер {$driver} не поддерживается для миграций");
+        }
+
         $this->pdo->exec($sql);
+        if (!$this->tableExists('migrations')) {
+            throw new \RuntimeException("Не удалось создать таблицу migrations");
+        }
     }
 
     public function run(): void
@@ -63,7 +89,7 @@ class Migrator
                 continue;
             }
 
-            require_once $file;
+            require $file;
             $class = $this->getClassFromFile($file);
             $migration = new $class();
             $migration->up();
@@ -132,5 +158,111 @@ class Migrator
     {
         $stmt = $this->pdo->prepare("DELETE FROM migrations WHERE migration = ?");
         $stmt->execute([$migration]);
+    }
+    private function createDatabaseIfNotExists(array $dbConfig): void
+    {
+        $driver = $dbConfig['driver'];
+
+        if ($driver === 'sqlite') {
+            // Для SQLite создаём директорию и файл
+            $dir = dirname($dbConfig['database']);
+            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+                throw new \RuntimeException("Не удалось создать директорию для SQLite: {$dir}");
+            }
+            return;
+        }
+
+        if (!in_array($driver, ['mysql', 'pgsql'])) {
+            return; // Другие драйверы не поддерживаются
+        }
+
+        try {
+            // Подключаемся без указания БД
+            $dsn = $this->getDsnWithoutDatabase($dbConfig);
+            $pdo = new \PDO($dsn, $dbConfig['username'], $dbConfig['password'], [
+                \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            ]);
+
+            // Создаём БД
+            $charset = $dbConfig['charset'] ?? ($driver === 'mysql' ? 'utf8mb4' : 'utf8');
+            $dbName = $dbConfig['database'];
+
+            if ($driver === 'mysql') {
+                $sql = "CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET {$charset}";
+            } else { // pgsql
+                $sql = "CREATE DATABASE \"{$dbName}\"";
+            }
+
+            $pdo->exec($sql);
+            echo "✅ База данных '{$dbName}' создана успешно.\n";
+
+        } catch (\PDOException $e) {
+            // Если БД уже существует - это нормально
+            if (!str_contains($e->getMessage(), 'database exists') &&
+                !str_contains($e->getMessage(), 'Can\'t create database')) {
+                throw new \RuntimeException("Ошибка создания базы данных: " . $e->getMessage());
+            }
+                if (str_contains($e->getMessage(), 'Access denied')) {
+                    throw new \RuntimeException("У пользователя БД нет прав на создание базы данных. Создайте БД '{$dbConfig['database']}' вручную.");
+                }
+                throw new \RuntimeException("Ошибка создания базы данных: " . $e->getMessage());
+        }
+    }
+    private function getDsnWithoutDatabase(array $dbConfig): string
+    {
+        $driver = $dbConfig['driver'];
+
+        if ($driver === 'mysql') {
+            return "mysql:host={$dbConfig['host']};port={$dbConfig['port']}";
+        }
+
+        if ($driver === 'pgsql') {
+            return "pgsql:host={$dbConfig['host']};port={$dbConfig['port']};user={$dbConfig['username']};password={$dbConfig['password']}";
+        }
+
+        throw new \RuntimeException("Драйвер {$driver} не поддерживается для создания БД");
+    }
+    private function connectToDatabase(array $dbConfig): void
+    {
+        $driver = $dbConfig['driver'];
+
+        if ($driver === 'sqlite') {
+            $dsn = "sqlite:{$dbConfig['database']}";
+        } elseif ($driver === 'mysql') {
+            $charset = $dbConfig['charset'] ?? 'utf8mb4';
+            $dsn = "mysql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};charset={$charset}";
+        } elseif ($driver === 'pgsql') {
+            $charset = $dbConfig['charset'] ?? 'utf8';
+            $dsn = "pgsql:host={$dbConfig['host']};port={$dbConfig['port']};dbname={$dbConfig['database']};user={$dbConfig['username']};password={$dbConfig['password']};charset={$charset}";
+        } else {
+            throw new \RuntimeException("Драйвер {$driver} не поддерживается");
+        }
+
+        $this->pdo = new \PDO($dsn, $dbConfig['username'], $dbConfig['password'], [
+            \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
+            \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+        ]);
+    }
+    private function tableExists(string $table): bool
+    {
+        $driver = $this->pdo->getAttribute(\PDO::ATTR_DRIVER_NAME);
+
+        switch ($driver) {
+            case 'mysql':
+                $sql = "SHOW TABLES LIKE ?";
+                break;
+            case 'pgsql':
+                $sql = "SELECT tablename FROM pg_tables WHERE tablename = ?";
+                break;
+            case 'sqlite':
+                $sql = "SELECT name FROM sqlite_master WHERE type='table' AND name=?";
+                break;
+            default:
+                return false;
+        }
+
+        $stmt = $this->pdo->prepare($sql);
+        $stmt->execute([$table]);
+        return (bool) $stmt->fetch();
     }
 }

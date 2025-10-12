@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace CodeX\Cli\Commands;
 
+use CodeX\Application;
 use CodeX\Cli\Command;
 use CodeX\Database\Migrator;
 
@@ -13,7 +14,7 @@ class Migrate extends Command
 
     public function handle(): int
     {
-        $migrationsPath = ROOT . 'database' . DIRECTORY_SEPARATOR . 'migrations';
+        $migrationsPath = Application::getInstance()->dirApp . 'database' . DIRECTORY_SEPARATOR . 'migrations';
         $migrator = new Migrator($migrationsPath);
         $migrator->run();
         $this->info('Миграции успешно выполнены.');

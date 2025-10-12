@@ -9,7 +9,7 @@ use PDO;
 class MySql implements ConnectionInterface
 {
     private PDO $pdo;
-    private MySqlSchemaBuilder $schemaBuilder;
+    private \CodeX\Database\Schema\Builder\MySql $schemaBuilder;
 
     public function __construct(array $config)
     {
@@ -19,7 +19,7 @@ class MySql implements ConnectionInterface
                 PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             ]);
-            $this->schemaBuilder = new MySqlSchemaBuilder($this);
+            $this->schemaBuilder = new \CodeX\Database\Schema\Builder\MySql($this);
         }catch (\PDOException $e){
             throw new \RuntimeException("Ошибка подключения к MySQL: " . $e->getMessage());
         }
