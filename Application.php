@@ -59,6 +59,9 @@ class Application
 
     public static function getInstance(): Application
     {
+        if (self::$instance === null) {
+            throw new \RuntimeException("Application не инициализирован. Создайте экземпляр через new Application().");
+        }
         return self::$instance;
     }
 
@@ -102,6 +105,9 @@ class Application
      */
     public function handlerShutdown(): void
     {
+        if(PHP_SAPI === 'cli'){
+            return;
+        }
         foreach ($this->shutdownCallbacks as $callback) {
             $callback();
         }

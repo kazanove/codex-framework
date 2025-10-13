@@ -373,6 +373,10 @@
                 this.parentElement.style.transform = 'scale(1)';
             });
         });
+        const successAlert = document.querySelector('.alert-success');
+        if (successAlert) {
+            successAlert.style.animation = 'fadeInUp 0.6s ease-out';
+        }
     });
 </script>
 </body>

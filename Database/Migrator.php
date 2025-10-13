@@ -164,48 +164,52 @@ class Migrator
         $driver = $dbConfig['driver'];
 
         if ($driver === 'sqlite') {
-            // Для SQLite создаём директорию и файл
             $dir = dirname($dbConfig['database']);
-            if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
                 throw new \RuntimeException("Не удалось создать директорию для SQLite: {$dir}");
             }
             return;
         }
 
         if (!in_array($driver, ['mysql', 'pgsql'])) {
-            return; // Другие драйверы не поддерживаются
+            return;
         }
 
         try {
-            // Подключаемся без указания БД
-            $dsn = $this->getDsnWithoutDatabase($dbConfig);
-            $pdo = new \PDO($dsn, $dbConfig['username'], $dbConfig['password'], [
+            // Сначала проверяем, существует ли БД
+            $tempDsn = $this->getDsnWithoutDatabase($dbConfig);
+            $tempPdo = new \PDO($tempDsn, $dbConfig['username'], $dbConfig['password'], [
                 \PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION,
             ]);
 
-            // Создаём БД
-            $charset = $dbConfig['charset'] ?? ($driver === 'mysql' ? 'utf8mb4' : 'utf8');
             $dbName = $dbConfig['database'];
+            $exists = false;
 
             if ($driver === 'mysql') {
-                $sql = "CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET {$charset}";
-            } else { // pgsql
-                $sql = "CREATE DATABASE \"{$dbName}\"";
+                $stmt = $tempPdo->prepare("SHOW DATABASES LIKE ?");
+                $stmt->execute([$dbName]);
+                $exists = (bool) $stmt->fetch();
+            } elseif ($driver === 'pgsql') {
+                $stmt = $tempPdo->prepare("SELECT 1 FROM pg_database WHERE datname = ?");
+                $stmt->execute([$dbName]);
+                $exists = (bool) $stmt->fetch();
             }
 
-            $pdo->exec($sql);
-            echo "✅ База данных '{$dbName}' создана успешно.\n";
+            if (!$exists) {
+                // Создаём БД
+                $charset = $dbConfig['charset'] ?? ($driver === 'mysql' ? 'utf8mb4' : 'utf8');
+                if ($driver === 'mysql') {
+                    $sql = "CREATE DATABASE `{$dbName}` CHARACTER SET {$charset}";
+                } else {
+                    $sql = "CREATE DATABASE \"{$dbName}\"";
+                }
+                $tempPdo->exec($sql);
+                echo "✅ База данных '{$dbName}' создана успешно.\n";
+            }
+            // Если БД существует — ничего не выводим
 
         } catch (\PDOException $e) {
-            // Если БД уже существует - это нормально
-            if (!str_contains($e->getMessage(), 'database exists') &&
-                !str_contains($e->getMessage(), 'Can\'t create database')) {
-                throw new \RuntimeException("Ошибка создания базы данных: " . $e->getMessage());
-            }
-                if (str_contains($e->getMessage(), 'Access denied')) {
-                    throw new \RuntimeException("У пользователя БД нет прав на создание базы данных. Создайте БД '{$dbConfig['database']}' вручную.");
-                }
-                throw new \RuntimeException("Ошибка создания базы данных: " . $e->getMessage());
+            throw new \RuntimeException("Ошибка проверки/создания БД: " . $e->getMessage());
         }
     }
     private function getDsnWithoutDatabase(array $dbConfig): string
