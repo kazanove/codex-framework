@@ -11,7 +11,8 @@ readonly class Definition
     public function __construct(
         public string                $uri,
         public string|array|\Closure $action,
-        public array                 $middleware = []
+        public array                 $middleware = [],
+        public array                 $tags = []
     ) {
         $this->validateAction();
     }
@@ -55,5 +56,33 @@ readonly class Definition
     public function getRawAction(): string|array|\Closure
     {
         return $this->action;
+    }
+    /**
+     * Добавляет тег к определению
+     */
+    public function withTag(string $tag): self
+    {
+        return new self(
+            $this->uri,
+            $this->action,
+            $this->middleware,
+            array_merge($this->tags, [$tag])
+        );
+    }
+
+    /**
+     * Проверяет, содержит ли определение тег
+     */
+    public function hasTag(string $tag): bool
+    {
+        return in_array($tag, $this->tags, true);
+    }
+
+    /**
+     * Возвращает все теги
+     */
+    public function getTags(): array
+    {
+        return $this->tags;
     }
 }

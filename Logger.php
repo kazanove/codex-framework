@@ -4,22 +4,21 @@ declare(strict_types=1);
 
 namespace CodeX;
 
+use CodeX\Logger\Level;
 use DateTimeImmutable;
 use JsonException;
-use Psr\Log\LoggerInterface;
-use Psr\Log\LogLevel;
 use RuntimeException;
 
-class Logger implements LoggerInterface
+class Logger //implements LoggerInterface
 {
     private string $name;
     private string $logPath;
-    private array $levelMap = [LogLevel::EMERGENCY => 700, LogLevel::ALERT => 600, LogLevel::CRITICAL => 550, LogLevel::ERROR => 500, LogLevel::WARNING => 400, LogLevel::NOTICE => 300, LogLevel::INFO => 200, LogLevel::DEBUG => 100,];
+    private array $levelMap = [Level::EMERGENCY => 700, Level::ALERT => 600, Level::CRITICAL => 550, Level::ERROR => 500, Level::WARNING => 400, Level::NOTICE => 300, Level::INFO => 200, Level::DEBUG => 100,];
 
     private int $minLevel;
     private ?array $buffer = null;
 
-    public function __construct(string $name, string $logPath, string $minLevel = LogLevel::DEBUG, bool $buffered = false)
+    public function __construct(string $name, string $logPath, string $minLevel = Level::DEBUG, bool $buffered = false)
     {
         $this->name = $name;
 
@@ -96,7 +95,7 @@ class Logger implements LoggerInterface
      */
     public function emergency($message, array $context = []): void
     {
-        $this->log(LogLevel::EMERGENCY, $message, $context);
+        $this->log(Level::EMERGENCY, $message, $context);
     }
 
     /**
@@ -140,7 +139,7 @@ class Logger implements LoggerInterface
      */
     public function alert($message, array $context = []): void
     {
-        $this->log(LogLevel::ALERT, $message, $context);
+        $this->log(Level::ALERT, $message, $context);
     }
 
     /**
@@ -148,7 +147,7 @@ class Logger implements LoggerInterface
      */
     public function critical($message, array $context = []): void
     {
-        $this->log(LogLevel::CRITICAL, $message, $context);
+        $this->log(Level::CRITICAL, $message, $context);
     }
 
     /**
@@ -156,7 +155,7 @@ class Logger implements LoggerInterface
      */
     public function error($message, array $context = []): void
     {
-        $this->log(LogLevel::ERROR, $message, $context);
+        $this->log(Level::ERROR, $message, $context);
     }
 
     /**
@@ -164,7 +163,7 @@ class Logger implements LoggerInterface
      */
     public function warning($message, array $context = []): void
     {
-        $this->log(LogLevel::WARNING, $message, $context);
+        $this->log(Level::WARNING, $message, $context);
     }
 
     /**
@@ -172,7 +171,7 @@ class Logger implements LoggerInterface
      */
     public function notice($message, array $context = []): void
     {
-        $this->log(LogLevel::NOTICE, $message, $context);
+        $this->log(Level::NOTICE, $message, $context);
     }
 
     /**
@@ -180,7 +179,7 @@ class Logger implements LoggerInterface
      */
     public function info($message, array $context = []): void
     {
-        $this->log(LogLevel::INFO, $message, $context);
+        $this->log(Level::INFO, $message, $context);
     }
 
     /**
@@ -188,7 +187,7 @@ class Logger implements LoggerInterface
      */
     public function debug($message, array $context = []): void
     {
-        $this->log(LogLevel::DEBUG, $message, $context);
+        $this->log(Level::DEBUG, $message, $context);
     }
 
     public function getName(): string

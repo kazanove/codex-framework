@@ -6,6 +6,8 @@ namespace CodeX\Router;
 
 class Route
 {
+    private static array $routes = [];
+
     private string $compiledPattern;
     private array $paramNames;
 
@@ -14,13 +16,22 @@ class Route
         // Предварительная компиляция шаблона для производительности
         $this->compiledPattern = $this->compileRoute($definition->uri);
         $this->paramNames = $this->getParamNames($definition->uri);
+
+        // Сохраняем маршрут в статический массив
+        self::$routes[] = $this;
     }
 
+    /**
+     * Возвращает определение маршрута
+     */
     public function getDefinition(): Definition
     {
         return $this->definition;
     }
 
+    /**
+     * Проверяет, соответствует ли путь маршруту
+     */
     public function matches(string $path, ?array &$params = null): bool
     {
         if (!preg_match($this->compiledPattern, $path, $matches)) {
@@ -39,6 +50,54 @@ class Route
         return true;
     }
 
+    /**
+     * Добавляет тег к маршруту
+     */
+    public function tag(string $tag): self
+    {
+        return new self($this->definition->withTag($tag));
+    }
+
+    /**
+     * Проверяет, имеет ли маршрут указанный тег
+     */
+    public function hasTag(string $tag): bool
+    {
+        return $this->definition->hasTag($tag);
+    }
+
+    /**
+     * Возвращает все теги маршрута
+     */
+    public function getTags(): array
+    {
+        return $this->definition->getTags();
+    }
+
+    /**
+     * Получает все зарегистрированные маршруты
+     */
+    public static function getAll(): array
+    {
+        return self::$routes;
+    }
+
+    /**
+     * Находит маршрут по URI и методу
+     */
+    public static function find(string $uri, string $method): ?self
+    {
+        foreach (self::$routes as $route) {
+            if ($route->getDefinition()->uri === $uri) {
+                return $route;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Компилирует шаблон маршрута в регулярное выражение
+     */
     private function compileRoute(string $uri): string
     {
         // Экранируем всё, кроме параметров
@@ -50,9 +109,13 @@ class Route
             $constraint = $matches[2] ?? '[^\/]+';
             return '(' . $constraint . ')';
         }, $pattern);
+
         return '/^' . $pattern . '$/u';
     }
 
+    /**
+     * Извлекает имена параметров из URI
+     */
     private function getParamNames(string $uri): array
     {
         preg_match_all('/\{([a-zA-Z0-9_]+)\}/', $uri, $matches);

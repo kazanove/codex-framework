@@ -11,7 +11,7 @@ use ReflectionException;
 use ReflectionMethod;
 use RuntimeException;
 
-class Container implements ContainerInterface
+class Container //implements ContainerInterface
 {
     private static ?Container $instance = null;
     private array $instances = [];

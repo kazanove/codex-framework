@@ -14,7 +14,7 @@ use Throwable;
 class Application
 {
     private static Application $instance;
-    public readonly ContainerInterface $container;
+    public readonly Container $container;
     public array $config = [];
     public readonly string $dirApp;
     private array $providers = [];

@@ -7,10 +7,6 @@ namespace CodeX\Providers;
 use CodeX\Debug\Bar;
 use CodeX\Http\Request;
 use CodeX\Provider;
-use Psr\Container\ContainerExceptionInterface;
-use Psr\Container\NotFoundExceptionInterface;
-use Psr\Log\LoggerInterface;
-use Psr\Log\LogLevel;
 use Throwable;
 
 class Debug extends Provider
@@ -23,7 +19,7 @@ class Debug extends Provider
         // Регистрируем основной Debug-утилиту
         $this->application->container->singleton(\CodeX\Debug::class, function () use ($debugEnabled, $logPath) {
             // Получаем основной логгер (он может быть файловым или буферизованным — решит boot())
-            $logger = $this->application->container->get(LoggerInterface::class);
+            $logger = $this->application->container->get(\CodeX\Logger::class);
             return new \CodeX\Debug($debugEnabled, $logPath, $logger);
         });
 
@@ -33,10 +29,6 @@ class Debug extends Provider
         });
     }
 
-    /**
-     * @throws ContainerExceptionInterface
-     * @throws NotFoundExceptionInterface
-     */
     public function boot(): void
     {
         $debugEnabled = $this->application->config['app']['debug'] ?? false;
@@ -51,10 +43,10 @@ class Debug extends Provider
 
         // Создаём буферизованный логгер для отладочной панели
         $logPath = $this->application->config['app']['debug_log_path'] ?? dirname(__DIR__, 2) . '/storage/logs/debug';
-        $debugLogger = new \CodeX\Logger('debug_bar', $logPath, LogLevel::DEBUG, buffered: true);
+        $debugLogger = new \CodeX\Logger('debug_bar', $logPath, \CodeX\Logger\Level::DEBUG, buffered: true);
 
         // Подменяем основной логгер на буферизованный (только для текущего запроса)
-        $container->instance(LoggerInterface::class, $debugLogger);
+        $container->instance(\CodeX\Logger::class, $debugLogger);
 
         // === Сбор данных запроса ===
         try {

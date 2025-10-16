@@ -22,7 +22,7 @@ class Debug
     public const string CLI_COLOR_WHITE = "\033[0;37m";
     public const string CLI_COLOR_GRAY = "\033[1;30m";
 
-    public function __construct(private readonly bool $enabled = false, private ?string $logPath = null, private ?LoggerInterface $logger = null)
+    public function __construct(private readonly bool $enabled = false, private ?string $logPath = null, private ?Logger $logger = null)
     {
         if ($this->logPath !== null && is_dir($this->logPath)) {
             $this->logPath = rtrim($this->logPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'debug.log';

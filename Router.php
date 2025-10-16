@@ -14,7 +14,14 @@ class Router
 {
     private array $routes = [];
     private array $middlewareStack = [];
-    private const ALLOWED_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
+    private const array ALLOWED_METHODS = [
+        'GET',
+        'POST',
+        'PUT',
+        'PATCH',
+        'DELETE',
+        'HEAD',
+        'OPTIONS'];
 
     public function __construct(private readonly Application $application)
     {
@@ -84,7 +91,7 @@ class Router
             $this->addRoute($method, $prefix . $uri, $action);
         }, $this, self::class);
 
-        $wrappedCallback = function (Router $router) use ($callback, $originalAddRoute) {
+        $wrappedCallback = static function (Router $router) use ($callback, $originalAddRoute) {
             // Переопределяем addRoute временно
             $router->addRoute = $originalAddRoute;
             $callback($router);
@@ -106,15 +113,20 @@ class Router
         return $this;
     }
 
+    /**
+     * @throws ReflectionException
+     */
     public function dispatcher(): Response
     {
         $request = $this->application->container->make(Request::class);
         $method = $request->getMethod();
         $path = $request->getPathInfo();
+
         // Быстрая проверка: есть ли маршруты для метода?
         if (empty($this->routes[$method])) {
             return $this->handleNotFound($request);
         }
+
         foreach ($this->routes[$method] as $route) {
             if ($route->matches($path, $params)) {
                 return $this->handleFoundRoute($route, $params, $request);
@@ -146,6 +158,9 @@ class Router
         return $this->makeResponse($result);
     }
 
+    /**
+     * @throws ReflectionException
+     */
     private function makeResponse(mixed $result): Response
     {
         if ($result instanceof Response) {
@@ -226,6 +241,9 @@ class Router
         return $reflection->invokeArgs($controllerInstance, $args);
     }
 
+    /**
+     * @throws ReflectionException
+     */
     private function handleNotFound(Request $request): Response
     {
         // Проверяем, определён ли кастомный обработчик 404
@@ -270,6 +288,9 @@ class Router
         return $response;
     }
 
+    /**
+     * @throws ReflectionException
+     */
     private function applyMiddleware(array $middleware): void
     {
         foreach ($middleware as $alias) {
